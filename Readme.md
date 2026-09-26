@@ -1,6 +1,6 @@
 # Restaurant POS Architecture
 
-Based on the decisions made so far, freeze the architecture at this level and avoid adding more infrastructure until the MVP proves it is needed.
+- Based on the decisions made so far, freeze the architecture at this level and avoid adding more infrastructure until the MVP proves it is needed.
 
 ## Getting Started
 
