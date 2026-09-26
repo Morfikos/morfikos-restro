@@ -15,19 +15,23 @@ pnpm dev:backend
 
 | Command | What it starts |
 | --- | --- |
-| `pnpm dev` | POS, KDS, Admin, cloud API, and restaurant server |
-| `pnpm dev:frontend` | POS, KDS, and Admin |
-| `pnpm dev:backend` | Cloud API and restaurant server |
+| `pnpm dev` | Web app, restaurant server, and cloud API |
+| `pnpm dev:frontend` | Web app |
+| `pnpm dev:backend` | Restaurant server and cloud API |
 
-| App | URL |
+| Surface | URL |
 | --- | --- |
-| POS | http://localhost:5173 |
-| KDS | http://localhost:5174 |
-| Admin | http://localhost:5175 |
-| Cloud API | http://localhost:3000/health |
-| Restaurant server | http://localhost:3001/health |
+| POS | http://localhost:5173/pos |
+| KDS | http://localhost:5173/kds |
+| Admin | http://localhost:5173/admin |
+| Restaurant API | http://localhost:3000/api/health |
+| Cloud API | http://localhost:4000/health |
 
-Single-app scripts: `pnpm dev:pos`, `pnpm dev:kds`, `pnpm dev:admin`, `pnpm dev:cloud-api`, and `pnpm dev:restaurant-server`.
+`/` redirects to `/pos`. The Vite dev server proxies `/api` to the restaurant server, so http://localhost:5173/api/health is the same check.
+
+Single-server scripts: `pnpm dev:restaurant-server` and `pnpm dev:cloud-api`.
+
+After `pnpm build`, the restaurant server also serves the web app at http://localhost:3000/pos, http://localhost:3000/kds, and http://localhost:3000/admin.
 
 Copy `.env.example` to `.env` when you connect Neon. Both servers start without `DATABASE_URL`.
 
@@ -62,26 +66,7 @@ Copy `.env.example` to `.env` when you connect Neon. Both servers start without 
 
 ## Final Architecture
 
-The system has two environments.
-
-### Cloud
-
-```text
-                    INTERNET
-                       │
-                       ▼
-              ┌─────────────────┐
-              │   Cloud API     │
-              │ Node + Fastify  │
-              └────────┬────────┘
-                       │
-                    Prisma
-                       │
-                       ▼
-              ┌─────────────────┐
-              │ Neon PostgreSQL │
-              └─────────────────┘
-```
+Staff use one web app. The restaurant server hosts that app and the local API. The cloud API is for sync only.
 
 ### Restaurant
 
@@ -90,32 +75,39 @@ The system has two environments.
                        │
               ┌────────▼─────────┐
               │ Restaurant Server │
-              │   Node + Fastify  │
-              └────────┬─────────┘
+              │                   │
+              │ React             │
+              │ /pos /kds /admin  │
+              │                   │
+              │ API  /api/*       │
+              │ WebSockets        │
+              │ SQLite            │
+              └────────┬──────────┘
                        │
-                    SQLite
-                       │
-          ┌────────────┼────────────┐
-          │            │            │
-          ▼            ▼            ▼
-         POS          KDS        Printers
-        React        React        ESC/POS
+                 POS   KDS   Admin
+                 Printers
 ```
 
-### Synchronization
+Open `http://restaurant.local/pos`, `/kds`, and `/admin`. Those routes and `/api` are the same origin, so the screens keep working when the internet is down.
+
+### Cloud
 
 ```text
-Neon PostgreSQL
-      ▲
-      │
-      │ Sync
-      │
 Restaurant Server
       │
-    SQLite
-      │
- ┌────┼────┐
- POS  KDS  Billing
+      │ Sync, when internet is available
+      ▼
+┌─────────────────┐
+│    Cloud API    │
+│  Node + Fastify │
+└────────┬────────┘
+         │
+      Prisma
+         │
+         ▼
+┌─────────────────┐
+│ Neon PostgreSQL │
+└─────────────────┘
 ```
 
 The restaurant server is the operational authority when the restaurant is offline.
@@ -129,21 +121,36 @@ restaurant-pos/
 │
 ├── apps/
 │   │
-│   ├── pos/
+│   ├── web/
 │   │   ├── src/
 │   │   │   ├── app/
 │   │   │   │   ├── router.tsx
-│   │   │   │   ├── providers.tsx
-│   │   │   │   └── app.tsx
+│   │   │   │   └── providers.tsx
 │   │   │   │
 │   │   │   ├── features/
-│   │   │   │   ├── auth/
-│   │   │   │   ├── tables/
-│   │   │   │   ├── menu/
-│   │   │   │   ├── orders/
-│   │   │   │   ├── billing/
-│   │   │   │   ├── payments/
-│   │   │   │   └── customers/
+│   │   │   │   ├── pos/
+│   │   │   │   │   ├── auth/
+│   │   │   │   │   ├── tables/
+│   │   │   │   │   ├── menu/
+│   │   │   │   │   ├── orders/
+│   │   │   │   │   ├── billing/
+│   │   │   │   │   ├── payments/
+│   │   │   │   │   └── customers/
+│   │   │   │   ├── kds/
+│   │   │   │   │   ├── kitchen/
+│   │   │   │   │   ├── tickets/
+│   │   │   │   │   ├── stations/
+│   │   │   │   │   └── timers/
+│   │   │   │   └── admin/
+│   │   │   │       ├── dashboard/
+│   │   │   │       ├── restaurants/
+│   │   │   │       ├── users/
+│   │   │   │       ├── roles/
+│   │   │   │       ├── menu/
+│   │   │   │       ├── tables/
+│   │   │   │       ├── orders/
+│   │   │   │       ├── payments/
+│   │   │   │       └── reports/
 │   │   │   │
 │   │   │   ├── components/
 │   │   │   │   ├── ui/
@@ -153,41 +160,6 @@ restaurant-pos/
 │   │   │   ├── stores/
 │   │   │   ├── hooks/
 │   │   │   ├── lib/
-│   │   │   └── main.tsx
-│   │   │
-│   │   └── package.json
-│   │
-│   ├── kds/
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   ├── features/
-│   │   │   │   ├── kitchen/
-│   │   │   │   ├── tickets/
-│   │   │   │   ├── stations/
-│   │   │   │   └── timers/
-│   │   │   ├── components/
-│   │   │   ├── hooks/
-│   │   │   ├── stores/
-│   │   │   ├── lib/
-│   │   │   └── main.tsx
-│   │   │
-│   │   └── package.json
-│   │
-│   ├── admin/
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   ├── features/
-│   │   │   │   ├── dashboard/
-│   │   │   │   ├── restaurants/
-│   │   │   │   ├── users/
-│   │   │   │   ├── roles/
-│   │   │   │   ├── menu/
-│   │   │   │   ├── tables/
-│   │   │   │   ├── orders/
-│   │   │   │   ├── payments/
-│   │   │   │   └── reports/
-│   │   │   ├── components/
-│   │   │   ├── hooks/
 │   │   │   └── main.tsx
 │   │   │
 │   │   └── package.json

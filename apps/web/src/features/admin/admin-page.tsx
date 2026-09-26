@@ -1,11 +1,11 @@
-import { useAppStore } from "../stores/app-store";
+import { useAppStore } from "../../stores/app-store";
 
-export function App() {
+export default function AdminPage() {
   const ready = useAppStore((state) => state.ready);
 
   return (
     <main>
-      <h1>Morfikos POS</h1>
+      <h1>Morfikos Admin</h1>
       <p>{ready ? "Starter shell is running." : "Starting..."}</p>
     </main>
   );

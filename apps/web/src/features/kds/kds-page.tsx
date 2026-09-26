@@ -1,6 +1,6 @@
-import { useAppStore } from "../stores/app-store";
+import { useAppStore } from "../../stores/app-store";
 
-export function App() {
+export default function KdsPage() {
   const ready = useAppStore((state) => state.ready);
 
   return (

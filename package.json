@@ -6,12 +6,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "turbo run dev --filter=@morfikos/pos --filter=@morfikos/kds --filter=@morfikos/admin --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
-    "dev:frontend": "turbo run dev --filter=@morfikos/pos --filter=@morfikos/kds --filter=@morfikos/admin",
+    "dev": "turbo run dev --filter=@morfikos/web --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
+    "dev:frontend": "turbo run dev --filter=@morfikos/web",
     "dev:backend": "turbo run dev --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
-    "dev:pos": "turbo run dev --filter=@morfikos/pos",
-    "dev:kds": "turbo run dev --filter=@morfikos/kds",
-    "dev:admin": "turbo run dev --filter=@morfikos/admin",
     "dev:cloud-api": "turbo run dev --filter=@morfikos/cloud-api",
     "dev:restaurant-server": "turbo run dev --filter=@morfikos/restaurant-server",
     "build": "turbo run build"
