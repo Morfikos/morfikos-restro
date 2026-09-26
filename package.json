@@ -1,0 +1,23 @@
+{
+  "name": "morfikos-restro",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@morfikos/pos --filter=@morfikos/kds --filter=@morfikos/admin --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
+    "dev:frontend": "turbo run dev --filter=@morfikos/pos --filter=@morfikos/kds --filter=@morfikos/admin",
+    "dev:backend": "turbo run dev --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
+    "dev:pos": "turbo run dev --filter=@morfikos/pos",
+    "dev:kds": "turbo run dev --filter=@morfikos/kds",
+    "dev:admin": "turbo run dev --filter=@morfikos/admin",
+    "dev:cloud-api": "turbo run dev --filter=@morfikos/cloud-api",
+    "dev:restaurant-server": "turbo run dev --filter=@morfikos/restaurant-server",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.6.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,11 @@
+// Cloud database schema. Models are added when data-model work starts.
+// Servers boot without DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
