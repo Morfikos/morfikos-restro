@@ -13,9 +13,11 @@
     "@morfikos/types": "workspace:*",
     "@fastify/static": "^8.2.0",
     "@morfikos/validation": "workspace:*",
+    "better-sqlite3": "^12.4.1",
     "fastify": "^5.6.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"

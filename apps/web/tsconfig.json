@@ -1,7 +1,11 @@
 {
   "extends": "../../packages/config/typescript/react.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime.d.ts"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

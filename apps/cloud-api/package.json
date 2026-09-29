@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@morfikos/auth": "workspace:*",
+    "@morfikos/database": "workspace:*",
     "@morfikos/types": "workspace:*",
     "@morfikos/validation": "workspace:*",
     "fastify": "^5.6.1"
