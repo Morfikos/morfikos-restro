@@ -15,25 +15,23 @@ pnpm dev:backend
 
 | Command | What it starts |
 | --- | --- |
-| `pnpm dev` | Web app, restaurant server, and cloud API |
+| `pnpm dev` | Web app and API |
 | `pnpm dev:frontend` | Web app |
-| `pnpm dev:backend` | Restaurant server and cloud API |
+| `pnpm dev:backend` | API |
+| `pnpm dev:api` | API |
 
 | Surface | URL |
 | --- | --- |
 | POS | http://localhost:5173/pos |
 | KDS | http://localhost:5173/kds |
 | Admin | http://localhost:5173/admin |
-| Restaurant API | http://localhost:3000/api/health |
-| Cloud API | http://localhost:4000/health |
+| API | http://localhost:3000/api/health |
 
-`/` redirects to `/pos`. The Vite dev server proxies `/api` to the restaurant server, so http://localhost:5173/api/health is the same check.
+`/` redirects to `/pos`. The Vite dev server proxies `/api` to the API, so http://localhost:5173/api/health is the same check.
 
-Single-server scripts: `pnpm dev:restaurant-server` and `pnpm dev:cloud-api`.
+After `pnpm build`, the API also serves the web app at http://localhost:3000/pos, http://localhost:3000/kds, and http://localhost:3000/admin.
 
-After `pnpm build`, the restaurant server also serves the web app at http://localhost:3000/pos, http://localhost:3000/kds, and http://localhost:3000/admin.
-
-Copy `.env.example` to `.env` when you connect Neon. Both servers start without `DATABASE_URL`.
+Copy `.env.example` to `.env` when you connect Neon. The API exposes `GET /api/health`. POS, KDS, and admin are empty screens.
 
 ## Final Tech Stack
 
@@ -41,11 +39,10 @@ Copy `.env.example` to `.env` when you connect Neon. Both servers start without 
 | --- | --- | --- |
 | Frontend | React + TypeScript | POS, KDS, and Admin interfaces |
 | Backend | Node.js + TypeScript | Application/backend services |
-| Backend Framework | Fastify | Cloud API and restaurant server |
-| Cloud Database | Neon PostgreSQL | Central source of truth |
+| Backend Framework | Fastify | API |
+| Database | Neon PostgreSQL | Source of truth |
 | ORM | Prisma | Database access and migrations |
-| Local Database | SQLite | Offline restaurant operations |
-| Authentication | Custom Auth | Full control over online/offline authentication |
+| Authentication | Custom Auth | Full control over authentication |
 | Password Hashing | Argon2id | Secure password storage |
 | Access Tokens | JWT | Short-lived API authentication |
 | Refresh Tokens | Database-backed refresh sessions | Session renewal/revocation |
@@ -57,8 +54,8 @@ Copy `.env.example` to `.env` when you connect Neon. Both servers start without 
 | Printing | ESC/POS | Thermal printers/KOT/receipts |
 | Monorepo | pnpm Workspaces | Workspace/package management |
 | Build System | Turborepo | Monorepo builds/tasks |
-| Containerization | Docker | Cloud API and restaurant server deployment |
-| Cloud Deployment | Docker-compatible hosting | Cloud API |
+| Containerization | Docker | API deployment |
+| Deployment | Docker-compatible hosting | API |
 | Testing | Not in scope | As decided |
 | Monitoring | Not in scope | As decided |
 | Redis | Not required | Add only if a demonstrated need appears |
@@ -66,40 +63,16 @@ Copy `.env.example` to `.env` when you connect Neon. Both servers start without 
 
 ## Final Architecture
 
-Staff use one web app. The restaurant server hosts that app and the local API. The cloud API is for sync only.
-
-### Restaurant
+Staff use one web app. It calls one API. The API is the source of truth, backed by Neon when `DATABASE_URL` is set.
 
 ```text
-                RESTAURANT LAN
-                       │
-              ┌────────▼─────────┐
-              │ Restaurant Server │
-              │                   │
-              │ React             │
-              │ /pos /kds /admin  │
-              │                   │
-              │ API  /api/*       │
-              │ WebSockets        │
-              │ SQLite            │
-              └────────┬──────────┘
-                       │
-                 POS   KDS   Admin
-                 Printers
-```
-
-Open `http://restaurant.local/pos`, `/kds`, and `/admin`. Those routes and `/api` are the same origin, so the screens keep working when the internet is down.
-
-### Cloud
-
-```text
-Restaurant Server
-      │
-      │ Sync, when internet is available
-      ▼
+        POS   KDS   Admin
+              │
+              ▼
 ┌─────────────────┐
-│    Cloud API    │
+│       API       │
 │  Node + Fastify │
+│  /api/*         │
 └────────┬────────┘
          │
       Prisma
@@ -110,9 +83,7 @@ Restaurant Server
 └─────────────────┘
 ```
 
-The restaurant server is the operational authority when the restaurant is offline.
-
-The Neon database is the central cloud source of truth when connectivity is available.
+The screens are empty shells. Feature routes are not wired yet.
 
 ## Final Monorepo Structure
 
@@ -164,57 +135,11 @@ restaurant-pos/
 │   │   │
 │   │   └── package.json
 │   │
-│   ├── cloud-api/
-│   │   ├── src/
-│   │   │   ├── app.ts
-│   │   │   ├── server.ts
-│   │   │
-│   │   │   ├── modules/
-│   │   │   │   ├── auth/
-│   │   │   │   ├── organizations/
-│   │   │   │   ├── restaurants/
-│   │   │   │   ├── users/
-│   │   │   │   ├── roles/
-│   │   │   │   ├── tables/
-│   │   │   │   ├── menu/
-│   │   │   │   ├── orders/
-│   │   │   │   ├── kitchen/
-│   │   │   │   ├── billing/
-│   │   │   │   ├── payments/
-│   │   │   │   ├── printers/
-│   │   │   │   ├── reports/
-│   │   │   │   └── sync/
-│   │   │   │
-│   │   │   ├── middleware/
-│   │   │   ├── plugins/
-│   │   │   ├── websocket/
-│   │   │   └── config/
-│   │   │
-│   │   └── package.json
-│   │
-│   └── restaurant-server/
+│   └── api/
 │       ├── src/
 │       │   ├── app.ts
 │       │   ├── server.ts
-│       │   │
-│       │   ├── modules/
-│       │   │   ├── auth/
-│       │   │   ├── users/
-│       │   │   ├── tables/
-│       │   │   ├── menu/
-│       │   │   ├── orders/
-│       │   │   ├── kitchen/
-│       │   │   ├── billing/
-│       │   │   ├── payments/
-│       │   │   ├── printers/
-│       │   │   └── sync/
-│       │   │
-│       │   ├── database/
-│       │   │   ├── sqlite.ts
-│       │   │   └── migrations/
-│       │   │
-│       │   ├── websocket/
-│       │   └── config/
+│       │   └── env.ts
 │       │
 │       └── package.json
 │
@@ -307,16 +232,13 @@ restaurant-pos/
 │
 ├── infrastructure/
 │   ├── docker/
-│   │   ├── cloud-api.Dockerfile
-│   │   └── restaurant-server.Dockerfile
+│   │   └── api.Dockerfile
 │   │
 │   └── deployment/
 │
 ├── docs/
 │   ├── architecture/
 │   │   ├── overview.md
-│   │   ├── offline-first.md
-│   │   ├── synchronization.md
 │   │   ├── authentication.md
 │   │   └── realtime.md
 │   │
@@ -359,13 +281,9 @@ The responsibilities are:
 | `session.ts` | User/device sessions |
 | `permissions.ts` | RBAC/permission checks |
 
-The cloud API and restaurant server both consume this package, but the persistence layer remains environment-specific.
+The API consumes this package.
 
-## Cloud vs Local Database
-
-Keep this distinction very clear in the codebase.
-
-### Cloud
+## Database
 
 ```text
 packages/database/
@@ -375,18 +293,7 @@ packages/database/
 
 Prisma → Neon PostgreSQL
 
-### Local
-
-```text
-apps/restaurant-server/
-└── src/database/
-    ├── sqlite.ts
-    └── migrations/
-```
-
-Restaurant server → SQLite
-
-The restaurant server should not directly use the cloud Prisma client for normal POS operations.
+The schema has no models yet. Add them when a feature needs persisted data.
 
 ## Core MVP Data Model
 
@@ -434,7 +341,6 @@ Don't overbuild the database on day one. Start with:
 - Session
 - RefreshToken
 - AuditLog
-- SyncRecord
 
 Then add inventory, loyalty, online ordering, multi-branch functionality, and similar features in their respective releases.
 
@@ -442,7 +348,7 @@ Then add inventory, loyalty, online ordering, multi-branch functionality, and si
 
 The architecture is:
 
-> React + TypeScript + Node.js + Fastify + Prisma + Neon PostgreSQL + SQLite + custom JWT/refresh-token authentication + RBAC + WebSockets + Zod + TanStack Query + Zustand + ESC/POS + pnpm/Turborepo + Docker.
+> React + TypeScript + Node.js + Fastify + Prisma + Neon PostgreSQL + custom JWT/refresh-token authentication + RBAC + WebSockets + Zod + TanStack Query + Zustand + ESC/POS + pnpm/Turborepo + Docker.
 
 Deliberately excluded:
 
@@ -454,4 +360,4 @@ Deliberately excluded:
 
 The most important architectural principle is:
 
-> Cloud-first data management, local-first restaurant operations.
+> The POS, kitchen, and admin screens work through the online API.

@@ -6,12 +6,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "turbo run dev --filter=@morfikos/web --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
+    "dev": "turbo run dev --filter=@morfikos/web --filter=@morfikos/api",
     "dev:frontend": "turbo run dev --filter=@morfikos/web",
-    "dev:backend": "turbo run dev --filter=@morfikos/cloud-api --filter=@morfikos/restaurant-server",
-    "dev:cloud-api": "turbo run dev --filter=@morfikos/cloud-api",
-    "dev:restaurant-server": "turbo run dev --filter=@morfikos/restaurant-server",
-    "build": "turbo run build"
+    "dev:backend": "turbo run dev --filter=@morfikos/api",
+    "dev:api": "turbo run dev --filter=@morfikos/api",
+    "build": "turbo run build",
+    "postinstall": "pnpm --filter @morfikos/database generate"
   },
   "devDependencies": {
     "turbo": "^2.6.1",
