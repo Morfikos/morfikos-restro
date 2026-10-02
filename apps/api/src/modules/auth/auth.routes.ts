@@ -1,15 +1,14 @@
-import type { FastifyInstance } from "fastify";
-
 import {
   signupController,
   getUsersController,
   loginController,
   changePasswordController,
   forgotPasswordController,
+  resetPasswordController,
 } from "./auth.controller.js";
 
 export async function authRoutes(
-  app: FastifyInstance
+  app: any
 ) {
   app.post(
     "/auth/signup",
@@ -35,4 +34,9 @@ export async function authRoutes(
     "/auth/forgot-password",
     forgotPasswordController
   );
+
+  app.post(
+    "/auth/reset-password",
+    resetPasswordController
+);
 }

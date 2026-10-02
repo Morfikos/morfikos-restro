@@ -7,8 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "DATABASE_URL=\"${DATABASE_URL:-postgresql://localhost:5432/postgres}\" prisma generate",
-    "seed": "tsx prisma/seed.ts"
+  "generate": "prisma generate",
+  "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3"
