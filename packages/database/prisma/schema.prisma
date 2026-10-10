@@ -19,21 +19,55 @@ model Organization {
   status       String   @default("active")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  branches Branch[]
-  staff    Staff[]
+  branches     Branch[]
+  staff        Staff[]
 }
 
+
 model Branch {
-  id             String       @id @default(uuid())
-  name           String
-  tables         Int          @default(0)
-  organizationId String
+  id                String       @id @default(uuid())
+  name              String
+  tables            Int
+  organizationId    String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  address           String
+  businessDays      Json
+  code              String?
+  gstin             String
+  invoiceFy         String
+  invoiceLastNumber Int          @default(0)
+  phone             String
+  settings          Json?
+  status            String       @default("active")
+  timezone          String
+  city              String
+  state             String
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Additional Branch API fields
+  fssaiNo            String?
+  googleReviewUrl    String?
+  businessDayCutoff  DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceSequences  InvoiceSequence[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+model InvoiceSequence {
+  id          String   @id @default(uuid())
+  branchId    String
+  financialYear String
+  lastNumber  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, financialYear])
+  @@index([branchId])
 }
 
 model Staff {
@@ -41,8 +75,7 @@ model Staff {
   name           String
   email          String       @unique
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
