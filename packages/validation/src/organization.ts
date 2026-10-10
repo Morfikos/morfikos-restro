@@ -1,4 +1,12 @@
+
 import { z } from "zod"
+
+export const businessTypeSchema = z.enum([
+  "RESTAURANT",
+  "CAFE",
+  "HOTEL",
+  "CLOUD_KITCHEN",
+])
 
 export const createOrganizationSchema = z.object({
   name: z
@@ -21,10 +29,7 @@ export const createOrganizationSchema = z.object({
     .trim()
     .min(1, "City is required"),
 
-  businessType: z
-    .string()
-    .trim()
-    .min(1, "Business type is required"),
+  businessType: businessTypeSchema,
 
   phone: z
     .string()
@@ -46,3 +51,4 @@ export const organizationIdSchema = z.object({
 export type CreateOrganizationInput = z.infer<
   typeof createOrganizationSchema
 >
+

@@ -6,6 +6,12 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+enum BusinessType {
+  RESTAURANT
+  CAFE
+  HOTEL
+  CLOUD_KITCHEN
+}
 
 model Organization {
   id           String   @id @default(uuid())
@@ -13,7 +19,7 @@ model Organization {
   gstin        String   @unique
   state        String
   city         String
-  businessType String
+  businessType BusinessType
   phone        String
   email        String
   status       String   @default("active")
