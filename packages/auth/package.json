@@ -9,5 +9,8 @@
   "dependencies": {
     "argon2": "^0.45.1",
     "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
   }
 }

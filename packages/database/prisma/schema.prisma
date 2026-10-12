@@ -7,12 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  status       String   @default("active")
-  lastLoginAt  DateTime?
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  status        String         @default("active")
+  lastLoginAt   DateTime?
+  refreshTokens RefreshToken[]
 }
 
 model Organization {
@@ -86,4 +87,16 @@ model Staff {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
