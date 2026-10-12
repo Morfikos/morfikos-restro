@@ -6,12 +6,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-enum BusinessType {
-  RESTAURANT
-  CAFE
-  HOTEL
-  CLOUD_KITCHEN
-}
 
 model Organization {
   id           String   @id @default(uuid())
@@ -19,27 +13,40 @@ model Organization {
   gstin        String   @unique
   state        String
   city         String
-  businessType BusinessType
+  businessType String
   phone        String
-  email        String
+  email        String   @unique
   status       String   @default("active")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  branches Branch[]
-  staff    Staff[]
+  branches     Branch[]
+  staff        Staff[]
 }
 
 model Branch {
-  id             String       @id @default(uuid())
-  name           String
-  tables         Int          @default(0)
-  organizationId String
+  id                String       @id @default(uuid())
+  name              String
+  tables            Int
+  organizationId    String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  address           String
+  businessDays      Json
+  code              String?
+  gstin             String
+  invoiceFy         String
+  invoiceLastNumber Int          @default(0)
+  phone             String
+  settings          Json?
+  status            String       @default("active")
+  timezone          String
+  city              String
+  state             String
+  fssaiNo           String?
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([organizationId])
+  @@index([organizationId, status])
 }
 
 model Staff {
@@ -47,8 +54,7 @@ model Staff {
   name           String
   email          String       @unique
   organizationId String
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
