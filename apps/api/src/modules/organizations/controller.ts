@@ -19,20 +19,19 @@ import {
 } from "./constants.js";
 
 import {
-  HTTP_STATUS,
-} from "../../utils/http-status.js";
-
-import {
-  sendValidationError,
-  sendInternalServerError,
-} from "../../utils/http-errors.js";
-
-import {
   isPrismaUniqueConstraintError,
 } from "../../utils/prisma-errors.js";
+import { sendError, sendSucess } from "../../utils/response.js";
+
 
 /**
- * Creates an organization after validating the request body.
+ * Create an Organization
+ *
+ * @export
+ * @async
+ * @param {FastifyRequest} request 
+ * @param {FastifyReply} reply 
+ * @returns {unknown} 
  */
 export async function createOrganizationController(
   request: FastifyRequest,
@@ -43,8 +42,9 @@ export async function createOrganizationController(
   );
 
   if (!result.success) {
-    return sendValidationError(
+    return sendError(
       reply,
+      400,
       ORGANIZATION_MESSAGES.INVALID_BODY,
       result.error,
     );
@@ -53,23 +53,36 @@ export async function createOrganizationController(
   try {
     const organization = await createOrganization(result.data);
 
-    return reply.status(HTTP_STATUS.CREATED).send({
-      id: organization.id,
-      name: organization.name,
-      createdAt: organization.createdAt.toISOString(),
-      status: organization.status,
-    });
+    return sendSucess(
+      reply,
+      201,
+      "Organization created successfully!",
+      {
+        id: organization.id,
+        name: organization.name,
+        createdAt: organization.createdAt.toISOString(),
+        status: organization.status,
+      }
+    );
   } catch (error: unknown) {
     if (isPrismaUniqueConstraintError(error)) {
       // Verify the violated unique field before returning a GSTIN-specific message.
-      return reply.status(HTTP_STATUS.CONFLICT).send({
-        message: ORGANIZATION_MESSAGES.GSTIN_CONFLICT,
-      });
+      return sendError(
+        reply,
+        409,
+        ORGANIZATION_MESSAGES.GSTIN_CONFLICT,
+        error
+      )
     }
 
-    return sendInternalServerError(
-      request,
+    request.log.error(
+      { err: error },
+      "Internal server error",
+    );
+
+    return sendError(
       reply,
+      500,
       ORGANIZATION_MESSAGES.CREATE_FAILED,
       error,
     );
@@ -77,7 +90,13 @@ export async function createOrganizationController(
 }
 
 /**
- * Retrieves an organization by its ID.
+ * Get organization
+ *
+ * @export
+ * @async
+ * @param {FastifyRequest} request 
+ * @param {FastifyReply} reply 
+ * @returns {unknown} 
  */
 export async function getOrganizationController(
   request: FastifyRequest,
@@ -88,10 +107,11 @@ export async function getOrganizationController(
   );
 
   if (!result.success) {
-    return sendValidationError(
+    return sendError(
       reply,
+      400,
       ORGANIZATION_MESSAGES.INVALID_ID,
-      result.error,
+      result.error
     );
   }
 
@@ -99,18 +119,35 @@ export async function getOrganizationController(
     const organization = await getOrganization(result.data.id);
 
     if (!organization) {
-      return reply.status(HTTP_STATUS.NOT_FOUND).send({
-        message: ORGANIZATION_MESSAGES.NOT_FOUND,
-      });
+      return sendError(
+        reply,
+        404,
+        ORGANIZATION_MESSAGES.NOT_FOUND,
+        new Error(
+          "Organization doesn't exist"
+        )
+      )
     }
 
-    return reply.status(HTTP_STATUS.OK).send(organization);
-  } catch (error: unknown) {
-    return sendInternalServerError(
-      request,
+    return sendSucess(
       reply,
-      ORGANIZATION_MESSAGES.GET_FAILED,
-      error,
+      200,
+      "Organization fetched sucessfully",
+      organization
+    )
+  }
+
+  catch (error: unknown) {
+    request.log.error(
+      { err: error },
+      "Internal server error",
     );
+
+    return sendError(
+      reply,
+      500,
+      ORGANIZATION_MESSAGES.GET_FAILED,
+      error
+    )
   }
 }

@@ -8,7 +8,7 @@ import "@morfikos/types";
 import "@morfikos/validation";
 
 import { organizationRoutes } from "./modules/organizations/routes.js";
-
+import { branchRoutes } from "./modules/branches/routes.js";
 const webDistPath = fileURLToPath(
   new URL("../../web/dist/", import.meta.url),
 );
@@ -18,7 +18,7 @@ export function buildApp() {
   const servesWeb = existsSync(webDistPath);
 
   app.register(organizationRoutes);
-
+  app.register(branchRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });
