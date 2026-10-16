@@ -1,14 +1,17 @@
-import argon2 from "argon2";
+import { hash, verify, type Algorithm } from "@node-rs/argon2";
+
+// Algorithm.Argon2id. The const enum can't be imported under verbatimModuleSyntax.
+const ARGON2ID = 2 as Algorithm;
 
 export async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, {
-    type: argon2.argon2id,
+  return hash(password, {
+    algorithm: ARGON2ID,
   });
 }
 
 export async function verifyPassword(
-  passwordHash: string,
   password: string,
+  passwordHash: string,
 ): Promise<boolean> {
-  return argon2.verify(passwordHash, password);
+  return verify(passwordHash, password);
 }

@@ -6,6 +6,13 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+enum UserRole {
+  admin
+  owner
+  manager
+  waiter
+  staff
+}
 model User {
   id            String         @id @default(uuid())
   name          String
@@ -14,6 +21,8 @@ model User {
   status        String         @default("active")
   lastLoginAt   DateTime?
   refreshTokens RefreshToken[]
+  role UserRole @default(staff)
+    memberships Membership[]
 }
 
 model Organization {
@@ -24,12 +33,14 @@ model Organization {
   city         String
   businessType String
   phone        String
-  email        String
+  email        String   @unique
   status       String   @default("active")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   branches     Branch[]
   staff        Staff[]
+    memberships Membership[]
+  
 }
 
 
@@ -52,7 +63,7 @@ model Branch {
   timezone          String
   city              String
   state             String
-
+  membershipBranchRoles MembershipBranchRole[]
   // Additional Branch API fields
   fssaiNo            String?
   googleReviewUrl    String?
@@ -99,4 +110,71 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model Membership {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  userId              String
+  status              String   @default("active")
+  discountCeilingPct  Float?
+  pinHash             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchRoles  MembershipBranchRole[]
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId, status])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  organizationId String?
+  name        String
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  branchRoles MembershipBranchRole[]
+
+  @@index([organizationId])
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId         String
+  permissionCode String
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionCode], references: [code], onDelete: Cascade)
+
+  @@id([roleId, permissionCode])
+  @@index([permissionCode])
+}
+
+model MembershipBranchRole {
+  id           String   @id @default(uuid())
+  membershipId String
+  branchId     String?
+  roleId       String
+  createdAt    DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  branch     Branch?    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId])
+  @@index([branchId])
+  @@index([roleId])
 }

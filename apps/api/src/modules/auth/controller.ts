@@ -17,15 +17,12 @@ export async function loginController(
   }
 
   try {
-    const user = await authService.login(
-      parsed.data.email,
-      parsed.data.password,
-    );
+    const result = await authService.login(
+  parsed.data.email,
+  parsed.data.password,
+);
 
-    return reply.status(200).send({
-      message: "Login successful",
-      user,
-    });
+return reply.send(result);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Login failed";
