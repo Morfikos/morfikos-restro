@@ -1,10 +1,12 @@
 
+import { format } from "date-fns";
 import { createPrismaClient } from "@morfikos/database";
 import type {
   CreateBranchInput,
   UpdateBranchInput,
 } from "@morfikos/validation";
 
+import {BranchServiceErrorCode, NON_ALPHANUMERIC_BRANCH_CODE_REGEX } from "../../../../../packages/auth/src/constants.js";
 const prisma = createPrismaClient();
 
 /**
@@ -18,10 +20,7 @@ export class BranchServiceError extends Error {
    * @param message - A description of the error.
    */
   constructor(
-    public readonly code:
-      | "ORGANIZATION_NOT_FOUND"
-      | "BRANCH_NOT_FOUND"
-      | "BRANCH_CODE_CONFLICT",
+    public readonly code: BranchServiceErrorCode,
     message: string,
   ) {
     super(message);
@@ -55,8 +54,10 @@ function generateBranchCode(name: string): string {
   const firstWord = name.trim().split(/\s+/)[0] ?? "";
 
   return (
-    firstWord.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) ||
-    "BRANCH"
+    firstWord
+      .toUpperCase()
+      .replace(NON_ALPHANUMERIC_BRANCH_CODE_REGEX, "")
+      .slice(0, 10) || "BRANCH"
   );
 }
 
@@ -75,13 +76,22 @@ function toDatabaseTime(value: string): Date {
 /**
  * Converts a database Date into an API time string.
  *
+ * Uses UTC hours and minutes to preserve the existing time-handling
+ * behavior while using date-fns for formatting.
+ *
  * @param value - The database time, or null.
  * @returns The time in HH:mm format, or null.
  */
 function toApiTime(value: Date | null): string | null {
   if (!value) return null;
 
-  return value.toISOString().slice(11, 16);
+  const utcHours = value.getUTCHours();
+  const utcMinutes = value.getUTCMinutes();
+
+  // Preserve the UTC clock components when formatting with date-fns.
+  const time = new Date(1970, 0, 1, utcHours, utcMinutes);
+
+  return format(time, "HH:mm");
 }
 
 /**
@@ -117,7 +127,7 @@ export async function createBranch(data: CreateBranchInput) {
 
   if (!organization || organization.status !== "active") {
     throw new BranchServiceError(
-      "ORGANIZATION_NOT_FOUND",
+      BranchServiceErrorCode.ORGANIZATION_NOT_FOUND,
       "Active organization not found",
     );
   }
@@ -368,8 +378,8 @@ export async function deactivateBranch(
  * Checks whether an unknown value matches a known branch service error.
  *
  * @param error - The unknown value to validate.
- * @returns True if the value contains a recognized branch error code
- * and a string message.
+ * @returns True if the value contains a recognized branch service error
+ * code and a string message.
  */
 export function isBranchServiceError(
   error: unknown,
@@ -386,10 +396,8 @@ export function isBranchServiceError(
   return (
     typeof error.code === "string" &&
     typeof error.message === "string" &&
-    (
-      error.code === "ORGANIZATION_NOT_FOUND" ||
-      error.code === "BRANCH_NOT_FOUND" ||
-      error.code === "BRANCH_CODE_CONFLICT"
+    Object.values(BranchServiceErrorCode).includes(
+      error.code as BranchServiceErrorCode,
     )
   );
 }
