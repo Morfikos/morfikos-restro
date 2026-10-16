@@ -10,7 +10,6 @@ import {
 
 import {
   isBranchServiceError,
-  BranchServiceError,
   createBranch,
   deactivateBranch,
   getBranch,
@@ -19,10 +18,7 @@ import {
 } from "./service.js";
 
 
-import {
-  sendError,
-  sendSucess,
-} from "../../utils/response.js";
+import { sendError,sendSucess } from "../../utils/response.js";
 
 import { ErrorCode } from "../../utils/error-codes.js";
 

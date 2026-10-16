@@ -21,8 +21,9 @@ import {
 import {
   isPrismaUniqueConstraintError,
 } from "../../utils/prisma-errors.js";
-import { sendError, sendSucess } from "../../utils/response.js";
-
+import { sendError} from "../../utils/response.js";
+import { sendSuccess } from "../../utils/response.js";
+import { ErrorCode } from "../../utils/error-codes.js";
 
 /**
  * Create an Organization
@@ -46,14 +47,14 @@ export async function createOrganizationController(
       reply,
       400,
       ORGANIZATION_MESSAGES.INVALID_BODY,
-      result.error,
+     ErrorCode.VALIDATION_ERROR,
     );
   }
 
   try {
     const organization = await createOrganization(result.data);
 
-    return sendSucess(
+    return sendSuccess(
       reply,
       201,
       "Organization created successfully!",
@@ -71,7 +72,7 @@ export async function createOrganizationController(
         reply,
         409,
         ORGANIZATION_MESSAGES.GSTIN_CONFLICT,
-        error
+        ErrorCode.GSTIN_CONFLICT,
       )
     }
 
@@ -84,7 +85,7 @@ export async function createOrganizationController(
       reply,
       500,
       ORGANIZATION_MESSAGES.CREATE_FAILED,
-      error,
+      ErrorCode.INTERNAL_SERVER_ERROR,
     );
   }
 }
@@ -111,7 +112,7 @@ export async function getOrganizationController(
       reply,
       400,
       ORGANIZATION_MESSAGES.INVALID_ID,
-      result.error
+      ErrorCode.VALIDATION_ERROR
     );
   }
 
@@ -123,13 +124,11 @@ export async function getOrganizationController(
         reply,
         404,
         ORGANIZATION_MESSAGES.NOT_FOUND,
-        new Error(
-          "Organization doesn't exist"
-        )
+       ErrorCode.VALIDATION_ERROR
       )
     }
 
-    return sendSucess(
+    return sendSuccess(
       reply,
       200,
       "Organization fetched sucessfully",
@@ -147,7 +146,7 @@ export async function getOrganizationController(
       reply,
       500,
       ORGANIZATION_MESSAGES.GET_FAILED,
-      error
+      ErrorCode.VALIDATION_ERROR
     )
   }
 }
