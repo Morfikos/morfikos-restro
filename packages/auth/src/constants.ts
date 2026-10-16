@@ -20,3 +20,10 @@ export enum BranchServiceErrorCode {
  * or digits (0–9), so they can be removed from a branch code.
  */
 export const NON_ALPHANUMERIC_BRANCH_CODE_REGEX = /[^A-Z0-9]/g;
+/**
+ * Defines the possible branch status values.
+ */
+export enum BranchStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+}

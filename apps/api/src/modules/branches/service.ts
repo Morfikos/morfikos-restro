@@ -1,6 +1,7 @@
 
 import { format } from "date-fns";
 import { createPrismaClient } from "@morfikos/database";
+import { BranchStatus } from "../../../../../packages/auth/src/constants.js";
 import type {
   CreateBranchInput,
   UpdateBranchInput,
@@ -252,7 +253,7 @@ export async function getBranch(
  */
 export async function listBranches(
   organizationId: string,
-  status: "active" | "inactive",
+  status: BranchStatus,
   limit: number,
   offset: number,
 ) {
