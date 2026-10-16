@@ -8,27 +8,28 @@ import "@morfikos/types";
 import "@morfikos/validation";
 import { authRoutes } from "./modules/auth/route.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
-
-const webDist = fileURLToPath(
+import { branchRoutes } from "./modules/branches/routes.js";
+const webDistPath = fileURLToPath(
   new URL("../../web/dist/", import.meta.url),
 );
 
 export function buildApp() {
   const app = Fastify({ logger: true });
-  const servesWeb = existsSync(webDist);
+  const servesWeb = existsSync(webDistPath);
 
   app.register(organizationRoutes);
  app.register(authRoutes, {
     prefix: "/api/v1/auth",
   });
 
+  app.register(branchRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });
 
   if (servesWeb) {
     app.register(fastifyStatic, {
-      root: webDist,
+      root: webDistPath,
     });
   }
 

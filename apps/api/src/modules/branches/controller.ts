@@ -1,13 +1,15 @@
 
 import type { FastifyReply, FastifyRequest } from "fastify";
+
 import {
   branchIdSchema,
   createBranchSchema,
   listBranchesQuerySchema,
   updateBranchSchema,
 } from "@morfikos/validation";
+
 import {
-  BranchServiceError,
+  isBranchServiceError,
   createBranch,
   deactivateBranch,
   getBranch,
@@ -15,345 +17,508 @@ import {
   updateBranch,
 } from "./service.js";
 
-type AuthContext = {
-  organizationId?: string;
-  role?: string;
-};
 
-function getAuthContext(request: FastifyRequest): AuthContext | null {
-  const authenticatedRequest = request as FastifyRequest & {
-    user?: AuthContext;
-  };
+import { sendError,sendSucess } from "../../utils/response.js";
 
-  return authenticatedRequest.user ?? null;
+import { ErrorCode } from "../../utils/error-codes.js";
+
+import { getAuthContext,getOrganizationId,hasRole } from "../../utils/auth-helpers.js";
+
+
+/**
+ * Sends an authentication error when the user is not logged in.
+ *
+ * @param reply - The Fastify reply instance.
+ * @returns An unauthorized response.
+ */
+function sendUnauthenticated(reply: FastifyReply) {
+  return sendError(
+    reply,
+    401,
+    "Login required",
+    ErrorCode.UNAUTHENTICATED,
+  );
 }
 
-function hasRole(
-  context: AuthContext,
-  allowedRoles: string[],
-): boolean {
-  return allowedRoles.includes(context.role?.toLowerCase() ?? "");
+/**
+ * Sends an authorization error when the user lacks permission.
+ *
+ * @param reply - The Fastify reply instance.
+ * @returns A forbidden response.
+ */
+function sendForbidden(reply: FastifyReply) {
+  return sendError(
+    reply,
+    403,
+    "Access denied",
+    ErrorCode.FORBIDDEN,
+  );
 }
 
-function sendValidationError(
-  reply: FastifyReply,
-  issues: unknown,
-) {
-  return reply.status(400).send({
-    success: false,
-    error: {
-      code: "VALIDATION_ERROR",
-      message: "Request validation failed",
-      issues,
-    },
-  });
+/**
+ * Sends a response when the organization context is missing.
+ *
+ * @param reply - The Fastify reply instance.
+ * @returns A forbidden response.
+ */
+function sendMissingOrganization(reply: FastifyReply) {
+  return sendError(
+    reply,
+    403,
+    "Organization context is missing",
+    ErrorCode.FORBIDDEN,
+  );
 }
 
-function sendServiceError(
-  reply: FastifyReply,
-  error: BranchServiceError,
-) {
-  const statusCode =
-    error.code === "ORGANIZATION_NOT_FOUND" ||
-    error.code === "BRANCH_NOT_FOUND"
-      ? 404
-      : 409;
-
-  return reply.status(statusCode).send({
-    success: false,
-    error: {
-      code: error.code,
-      message: error.message,
-    },
-  });
-}
-
-function sendInternalError(reply: FastifyReply) {
-  return reply.status(500).send({
-    success: false,
-    error: {
-      code: "INTERNAL_SERVER_ERROR",
-      message: "An unexpected error occurred",
-    },
-  });
-}
-
-function isBranchServiceError(
+/**
+ * Handles known branch service errors.
+ *
+ * @param error - The error thrown by the branch service.
+ * @param reply - The Fastify reply instance.
+ * @returns An error response for known service errors, or null.
+ */
+function handleBranchServiceError(
   error: unknown,
-): error is BranchServiceError {
-  return error instanceof BranchServiceError;
+  reply: FastifyReply,
+) {
+  if (!isBranchServiceError(error)) {
+  return null;
 }
 
+  switch (error.code) {
+    case "ORGANIZATION_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.ORGANIZATION_NOT_FOUND,
+      );
+
+    case "BRANCH_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.BRANCH_NOT_FOUND,
+      );
+
+    case "BRANCH_CODE_CONFLICT":
+      return sendError(
+        reply,
+        409,
+        error.message,
+        ErrorCode.BRANCH_CODE_CONFLICT,
+      );
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Creates a new branch for an organization.
+ *
+ * @param request - The incoming request containing branch details.
+ * @param reply - The Fastify reply instance.
+ * @returns The created branch or an error response.
+ */
 export async function createBranchController(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const auth = getAuthContext(request);
+  const context = getAuthContext(request);
 
-  if (!auth) {
-    return reply.status(401).send({
-      success: false,
-      error: { code: "UNAUTHENTICATED", message: "Login required" },
-    });
+  if (!context) {
+    return sendUnauthenticated(reply);
   }
 
-  if (!hasRole(auth, ["owner"])) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "FORBIDDEN", message: "Owner access required" },
-    });
+  if (!hasRole(context, ["owner"])) {
+    return sendError(
+      reply,
+      403,
+      "Owner access required",
+      ErrorCode.FORBIDDEN,
+    );
   }
 
   const parsed = createBranchSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    return sendValidationError(reply, parsed.error.issues);
-  }
-
-  if (
-    !auth.organizationId ||
-    auth.organizationId !== parsed.data.organizationId
-  ) {
-    return reply.status(403).send({
-      success: false,
-      error: {
-        code: "ORGANIZATION_ACCESS_DENIED",
-        message: "You cannot create a branch for this organization",
-      },
-    });
+    return sendError(
+      reply,
+      400,
+      "Request validation failed",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
   try {
     const branch = await createBranch(parsed.data);
 
-    return reply.status(201).send({
-      success: true,
-      data: branch,
-    });
+    return sendSucess(
+      reply,
+      201,
+      "Branch created successfully",
+      branch,
+    );
   } catch (error: unknown) {
-    if (isBranchServiceError(error)) {
-      return sendServiceError(reply, error);
+    const handled = handleBranchServiceError(error, reply);
+
+    if (handled) {
+      return handled;
     }
 
-    request.log.error({ err: error }, "Failed to create branch");
-    return sendInternalError(reply);
+   request.log.error(
+  { err: error },
+  "Failed to create branch",
+);
+
+return sendError(
+  reply,
+  500,
+  "An unexpected error occurred",
+  ErrorCode.INTERNAL_SERVER_ERROR,
+);
   }
 }
 
+/**
+ * Retrieves a branch by its ID within the authenticated organization.
+ *
+ * @param request - The incoming request containing the branch ID.
+ * @param reply - The Fastify reply instance.
+ * @returns The requested branch or an error response.
+ */
 export async function getBranchController(
-  request: FastifyRequest,
+  request: FastifyRequest<{
+    Params: { id: string };
+  }>,
   reply: FastifyReply,
 ) {
-  const auth = getAuthContext(request);
+  const context = getAuthContext(request);
 
-  if (!auth) {
-    return reply.status(401).send({
-      success: false,
-      error: { code: "UNAUTHENTICATED", message: "Login required" },
-    });
+  if (!context) {
+    return sendUnauthenticated(reply);
   }
 
-  if (!auth.organizationId) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "ORGANIZATION_REQUIRED", message: "Organization context required" },
-    });
+  if (!hasRole(context, ["owner", "manager"])) {
+    return sendForbidden(reply);
+  }
+
+  const organizationId = getOrganizationId(request);
+
+  if (!organizationId) {
+    return sendMissingOrganization(reply);
   }
 
   const parsed = branchIdSchema.safeParse(request.params);
 
   if (!parsed.success) {
-    return sendValidationError(reply, parsed.error.issues);
+    return sendError(
+      reply,
+      400,
+      "Invalid branch ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
   try {
-    const branch = await getBranch(parsed.data.id, auth.organizationId);
+    const branch = await getBranch(
+      parsed.data.id,
+      organizationId,
+    );
 
     if (!branch) {
-      return reply.status(404).send({
-        success: false,
-        error: { code: "BRANCH_NOT_FOUND", message: "Branch not found" },
-      });
+      return sendError(
+        reply,
+        404,
+        "Branch not found",
+        ErrorCode.BRANCH_NOT_FOUND,
+      );
     }
 
-    return reply.status(200).send({
-      success: true,
-      data: branch,
-    });
+    return sendSucess(
+      reply,
+      200,
+      "Branch retrieved successfully",
+      branch,
+    );
   } catch (error: unknown) {
-    request.log.error({ err: error }, "Failed to get branch");
-    return sendInternalError(reply);
+    const handled = handleBranchServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+   request.log.error(
+  { err: error },
+  "Failed to create branch",
+);
+
+return sendError(
+  reply,
+  500,
+  "An unexpected error occurred",
+  ErrorCode.INTERNAL_SERVER_ERROR,
+);
   }
 }
 
+/**
+ * Lists branches belonging to the authenticated organization.
+ *
+ * @param request - The incoming request containing query parameters.
+ * @param reply - The Fastify reply instance.
+ * @returns The matching branches or an error response.
+ */
 export async function listBranchesController(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const auth = getAuthContext(request);
+  const context = getAuthContext(request);
 
-  if (!auth) {
-    return reply.status(401).send({
-      success: false,
-      error: { code: "UNAUTHENTICATED", message: "Login required" },
-    });
+  if (!context) {
+    return sendUnauthenticated(reply);
   }
 
-  if (!hasRole(auth, ["owner", "manager"])) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "FORBIDDEN", message: "Owner or Manager access required" },
-    });
+  if (!hasRole(context, ["owner", "manager"])) {
+    return sendForbidden(reply);
   }
 
-  if (!auth.organizationId) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "ORGANIZATION_REQUIRED", message: "Organization context required" },
-    });
+  const organizationId = getOrganizationId(request);
+
+  if (!organizationId) {
+    return sendMissingOrganization(reply);
   }
 
   const parsed = listBranchesQuerySchema.safeParse(request.query);
 
   if (!parsed.success) {
-    return sendValidationError(reply, parsed.error.issues);
+    return sendError(
+      reply,
+      400,
+      "Invalid branch query parameters",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
   try {
-    const result = await listBranches(
-      auth.organizationId,
+    const branches = await listBranches(
+      organizationId,
       parsed.data.status,
       parsed.data.limit,
       parsed.data.offset,
     );
 
-    return reply.status(200).send({
-      success: true,
-      data: result,
-    });
+    return sendSucess(
+      reply,
+      200,
+      "Branches retrieved successfully",
+      branches,
+    );
   } catch (error: unknown) {
-    request.log.error({ err: error }, "Failed to list branches");
-    return sendInternalError(reply);
+    const handled = handleBranchServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+   request.log.error(
+  { err: error },
+  "Failed to create branch",
+);
+
+return sendError(
+  reply,
+  500,
+  "An unexpected error occurred",
+  ErrorCode.INTERNAL_SERVER_ERROR,
+);
   }
 }
 
+/**
+ * Updates an existing branch within the authenticated organization.
+ *
+ * @param request - The incoming request containing the branch ID and updates.
+ * @param reply - The Fastify reply instance.
+ * @returns The updated branch or an error response.
+ */
 export async function updateBranchController(
-  request: FastifyRequest,
+  request: FastifyRequest<{
+    Params: { id: string };
+  }>,
   reply: FastifyReply,
 ) {
-  const auth = getAuthContext(request);
+  const context = getAuthContext(request);
 
-  if (!auth) {
-    return reply.status(401).send({
-      success: false,
-      error: { code: "UNAUTHENTICATED", message: "Login required" },
-    });
+  if (!context) {
+    return sendUnauthenticated(reply);
   }
 
-  if (!hasRole(auth, ["owner"])) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "FORBIDDEN", message: "Owner access required" },
-    });
+  if (!hasRole(context, ["owner"])) {
+    return sendError(
+      reply,
+      403,
+      "Owner access required",
+      ErrorCode.FORBIDDEN,
+    );
   }
 
-  if (!auth.organizationId) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "ORGANIZATION_REQUIRED", message: "Organization context required" },
-    });
+  const organizationId = getOrganizationId(request);
+
+  if (!organizationId) {
+    return sendMissingOrganization(reply);
   }
 
-  const params = branchIdSchema.safeParse(request.params);
-  if (!params.success) {
-    return sendValidationError(reply, params.error.issues);
+  const parsedId = branchIdSchema.safeParse(request.params);
+
+  if (!parsedId.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid branch ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
-  const body = updateBranchSchema.safeParse(request.body);
-  if (!body.success) {
-    return sendValidationError(reply, body.error.issues);
+  const parsedBody = updateBranchSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      reply,
+      400,
+      "Request validation failed",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
   try {
     const branch = await updateBranch(
-      params.data.id,
-      auth.organizationId,
-      body.data,
+      parsedId.data.id,
+      organizationId,
+      parsedBody.data,
     );
 
     if (!branch) {
-      return reply.status(404).send({
-        success: false,
-        error: { code: "BRANCH_NOT_FOUND", message: "Branch not found" },
-      });
+      return sendError(
+        reply,
+        404,
+        "Branch not found",
+        ErrorCode.BRANCH_NOT_FOUND,
+      );
     }
 
-    return reply.status(200).send({
-      success: true,
-      data: branch,
-    });
+    return sendSucess(
+      reply,
+      200,
+      "Branch updated successfully",
+      branch,
+    );
   } catch (error: unknown) {
-    request.log.error({ err: error }, "Failed to update branch");
-    return sendInternalError(reply);
+    const handled = handleBranchServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+   request.log.error(
+  { err: error },
+  "Failed to create branch",
+);
+
+return sendError(
+  reply,
+  500,
+  "An unexpected error occurred",
+  ErrorCode.INTERNAL_SERVER_ERROR,
+);
   }
 }
 
+/**
+ * Deactivates a branch belonging to the authenticated organization.
+ *
+ * @param request - The incoming request containing the branch ID.
+ * @param reply - The Fastify reply instance.
+ * @returns A success response or an error response.
+ */
 export async function deleteBranchController(
-  request: FastifyRequest,
+  request: FastifyRequest<{
+    Params: { id: string };
+  }>,
   reply: FastifyReply,
 ) {
-  const auth = getAuthContext(request);
+  const context = getAuthContext(request);
 
-  if (!auth) {
-    return reply.status(401).send({
-      success: false,
-      error: { code: "UNAUTHENTICATED", message: "Login required" },
-    });
+  if (!context) {
+    return sendUnauthenticated(reply);
   }
 
-  if (!hasRole(auth, ["owner"])) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "FORBIDDEN", message: "Owner access required" },
-    });
+  if (!hasRole(context, ["owner"])) {
+    return sendError(
+      reply,
+      403,
+      "Owner access required",
+      ErrorCode.FORBIDDEN,
+    );
   }
 
-  if (!auth.organizationId) {
-    return reply.status(403).send({
-      success: false,
-      error: { code: "ORGANIZATION_REQUIRED", message: "Organization context required" },
-    });
+  const organizationId = getOrganizationId(request);
+
+  if (!organizationId) {
+    return sendMissingOrganization(reply);
   }
 
   const parsed = branchIdSchema.safeParse(request.params);
 
   if (!parsed.success) {
-    return sendValidationError(reply, parsed.error.issues);
+    return sendError(
+      reply,
+      400,
+      "Invalid branch ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
   }
 
   try {
     const branch = await deactivateBranch(
       parsed.data.id,
-      auth.organizationId,
+      organizationId,
     );
 
     if (!branch) {
-      return reply.status(404).send({
-        success: false,
-        error: { code: "BRANCH_NOT_FOUND", message: "Branch not found" },
-      });
+      return sendError(
+        reply,
+        404,
+        "Branch not found",
+        ErrorCode.BRANCH_NOT_FOUND,
+      );
     }
 
-    return reply.status(200).send({
-      success: true,
-      data: {
-        id: branch.id,
-        status: branch.status,
-        message: "Branch deactivated successfully",
-      },
-    });
+    return sendSucess(
+      reply,
+      200,
+      "Branch deactivated successfully",
+      branch,
+    );
   } catch (error: unknown) {
-    request.log.error({ err: error }, "Failed to deactivate branch");
-    return sendInternalError(reply);
+    const handled = handleBranchServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+   request.log.error(
+  { err: error },
+  "Failed to create branch",
+);
+
+return sendError(
+  reply,
+  500,
+  "An unexpected error occurred",
+  ErrorCode.INTERNAL_SERVER_ERROR,
+);
   }
 }

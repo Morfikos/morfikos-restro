@@ -1,11 +1,12 @@
-generator client {
+﻿generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url = env("DATABASE_URL")
 }
+
 enum UserRole {
   admin
   owner
@@ -22,7 +23,7 @@ model User {
   lastLoginAt   DateTime?
   refreshTokens RefreshToken[]
   role UserRole @default(staff)
-    memberships Membership[]
+  memberships Membership[]
 }
 
 model Organization {
@@ -39,65 +40,58 @@ model Organization {
   updatedAt    DateTime @updatedAt
   branches     Branch[]
   staff        Staff[]
-    memberships Membership[]
-  
-}
-
+  memberships Membership[]
+  }
 
 model Branch {
-  id                String       @id @default(uuid())
+  id                String    @id @default(uuid())
   name              String
   tables            Int
   organizationId    String
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   address           String
   businessDays      Json
   code              String?
   gstin             String
   invoiceFy         String
-  invoiceLastNumber Int          @default(0)
+  invoiceLastNumber Int       @default(0)
   phone             String
   settings          Json?
-  status            String       @default("active")
+  status            String    @default("active")
   timezone          String
   city              String
   state             String
   membershipBranchRoles MembershipBranchRole[]
-  // Additional Branch API fields
   fssaiNo            String?
   googleReviewUrl    String?
   businessDayCutoff  DateTime?
-
   organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoiceSequences  InvoiceSequence[]
-
+  invoiceSequences InvoiceSequence[]
   @@index([organizationId])
   @@index([organizationId, status])
 }
 
 model InvoiceSequence {
-  id          String   @id @default(uuid())
-  branchId    String
+  id            String   @id @default(uuid())
+  branchId      String
   financialYear String
-  lastNumber  Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
+  lastNumber    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
   @@unique([branchId, financialYear])
   @@index([branchId])
 }
 
 model Staff {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   name           String
-  email          String       @unique
+  email          String   @unique
   organizationId String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 model RefreshToken {
   id        String    @id @default(uuid())
@@ -106,9 +100,7 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
-
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
 }
 
@@ -121,11 +113,9 @@ model Membership {
   pinHash             String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   branchRoles  MembershipBranchRole[]
-
   @@unique([organizationId, userId])
   @@index([userId])
   @@index([organizationId, status])
@@ -138,10 +128,8 @@ model Role {
   isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
   permissions RolePermission[]
   branchRoles MembershipBranchRole[]
-
   @@index([organizationId])
 }
 
@@ -155,10 +143,8 @@ model Permission {
 model RolePermission {
   roleId         String
   permissionCode String
-
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionCode], references: [code], onDelete: Cascade)
-
   @@id([roleId, permissionCode])
   @@index([permissionCode])
 }
@@ -169,11 +155,9 @@ model MembershipBranchRole {
   branchId     String?
   roleId       String
   createdAt    DateTime @default(now())
-
   membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   branch     Branch?    @relation(fields: [branchId], references: [id], onDelete: Cascade)
   role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
   @@index([membershipId])
   @@index([branchId])
   @@index([roleId])

@@ -1,4 +1,3 @@
-
 -- AlterTable
 ALTER TABLE "Branch" ADD COLUMN     "address" TEXT NOT NULL,
 ADD COLUMN     "businessDays" JSONB NOT NULL,
