@@ -1,1 +1,2 @@
-export { createPrismaClient } from "./client.js";
+
+export * from "./client.js";
