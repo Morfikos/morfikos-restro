@@ -4,7 +4,12 @@ import type { UserRole } from "@morfikos/auth";
 export interface AuthContext {
   userId: string;
   role: UserRole;
+  /** First organization the user belongs to (kept for existing controllers). */
   organizationId?: string;
+  /** All organizations the user can access. */
+  organizationIds: string[];
+  /** All branches the user can access. */
+  branchIds: string[];
 }
 
 /** Returns the authenticated user's context, or null if not logged in. */
