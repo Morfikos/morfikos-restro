@@ -53,6 +53,8 @@ model Organization {
   branches     Branch[]
   staff        Staff[]
   memberships Membership[]
+  menuCategories MenuCategory[]
+  cuisines       Cuisine[]
   }
 
 model Branch {
@@ -173,4 +175,32 @@ model MembershipBranchRole {
   @@index([membershipId])
   @@index([branchId])
   @@index([roleId])
+}
+
+model MenuCategory {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+}
+
+model Cuisine {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
 }
