@@ -1,13 +1,13 @@
 
 import { format } from "date-fns";
 import { createPrismaClient } from "@morfikos/database";
-import { BranchStatus } from "../../../../../packages/auth/src/constants.js";
 import type {
   CreateBranchInput,
+  ListBranchesQuery,
   UpdateBranchInput,
 } from "@morfikos/validation";
 
-import {BranchServiceErrorCode, NON_ALPHANUMERIC_BRANCH_CODE_REGEX } from "../../../../../packages/auth/src/constants.js";
+import { BranchServiceErrorCode, NON_ALPHANUMERIC_BRANCH_CODE_REGEX } from "@morfikos/auth";
 const prisma = createPrismaClient();
 
 /**
@@ -253,7 +253,7 @@ export async function getBranch(
  */
 export async function listBranches(
   organizationId: string,
-  status: BranchStatus,
+  status: ListBranchesQuery["status"],
   limit: number,
   offset: number,
 ) {

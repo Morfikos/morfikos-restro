@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import "@morfikos/auth";
 import "@morfikos/types";
 import "@morfikos/validation";
-
+import { authRoutes } from "./modules/auth/route.js";
 import { organizationRoutes } from "./modules/organizations/routes.js";
 import { branchRoutes } from "./modules/branches/routes.js";
 const webDistPath = fileURLToPath(
@@ -18,6 +18,10 @@ export function buildApp() {
   const servesWeb = existsSync(webDistPath);
 
   app.register(organizationRoutes);
+ app.register(authRoutes, {
+    prefix: "/api/v1/auth",
+  });
+
   app.register(branchRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
@@ -43,6 +47,8 @@ export function buildApp() {
 
     return reply.sendFile("index.html");
   });
+  ;
+
 
   return app;
 }

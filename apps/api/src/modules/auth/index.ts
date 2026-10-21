@@ -1,0 +1,1 @@
+export { authRoutes } from "./route.js";
