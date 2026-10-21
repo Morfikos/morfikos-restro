@@ -55,6 +55,7 @@ model Organization {
   memberships Membership[]
   menuCategories MenuCategory[]
   cuisines       Cuisine[]
+  menuItems      MenuItem[]
   }
 
 model Branch {
@@ -82,6 +83,8 @@ model Branch {
   businessDayCutoff  DateTime?
   organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoiceSequences InvoiceSequence[]
+  menuItems        BranchMenuItem[]
+  diningTables     DiningTable[]
   @@index([organizationId])
   @@index([organizationId, status])
 }
@@ -187,6 +190,7 @@ model MenuCategory {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        MenuItem[]
   @@unique([organizationId, name])
   @@index([organizationId, isActive])
 }
@@ -203,4 +207,54 @@ model Cuisine {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   @@unique([organizationId, name])
   @@index([organizationId, isActive])
+}
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  organizationId  String
+  categoryId      String
+  name            String
+  description     String?
+  gst             Decimal  @db.Decimal(5, 2)
+  hsn             String
+  isVeg           Boolean
+  allergens       String[] @default([])
+  preparationTime Int?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category        MenuCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  branchItems     BranchMenuItem[]
+  @@unique([categoryId, name])
+  @@index([organizationId, isActive])
+}
+
+model BranchMenuItem {
+  id                  String   @id @default(uuid())
+  branchId            String
+  menuItemId          String
+  price               Decimal  @db.Decimal(10, 2)
+  costPrice           Decimal? @db.Decimal(10, 2)
+  isAvailable         Boolean  @default(true)
+  maxQuantityPerOrder Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  branch              Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  menuItem            MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  @@unique([branchId, menuItemId])
+  @@index([menuItemId])
+}
+
+model DiningTable {
+  id        String   @id @default(uuid())
+  branchId  String
+  name      String
+  qrCode    String   @unique @default(uuid())
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  @@unique([branchId, name])
+  @@index([branchId])
 }

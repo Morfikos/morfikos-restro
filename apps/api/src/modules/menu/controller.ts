@@ -1,24 +1,34 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import type { UserRole } from "@morfikos/auth";
+
 import {
+  branchMenuItemParamsSchema,
   createCategorySchema,
   createCuisineSchema,
+  createMenuItemSchema,
   listMenuQuerySchema,
   menuIdSchema,
+  qrCodeParamsSchema,
   updateCategorySchema,
   updateCuisineSchema,
+  upsertBranchMenuItemSchema,
 } from "@morfikos/validation";
 
 import {
   createCategory,
   createCuisine,
+  createMenuItem,
   deactivateCategory,
   deactivateCuisine,
+  getMenuItem,
+  getPublicMenu,
   isMenuServiceError,
   listCategories,
   listCuisines,
   updateCategory,
   updateCuisine,
+  upsertBranchMenuItem,
 } from "./service.js";
 
 import { sendError, sendSuccess } from "../../utils/response.js";
@@ -30,6 +40,20 @@ import { getAuthContext, getOrganizationId, hasRole } from "../../utils/auth-hel
 type MenuIdRequest = FastifyRequest<{
   Params: { id: string };
 }>;
+
+type BranchMenuItemRequest = FastifyRequest<{
+  Params: { branchId: string; itemId: string };
+}>;
+
+type PublicMenuRequest = FastifyRequest<{
+  Params: { qrCode: string };
+}>;
+
+/** Roles allowed to create and change menu data. */
+const MENU_MANAGER_ROLES: UserRole[] = ["owner", "manager"];
+
+/** Roles allowed to read menu data inside the organization. */
+const MENU_READER_ROLES: UserRole[] = ["owner", "manager", "waiter", "staff"];
 
 /**
  * Sends an authentication error when the user is not logged in.
@@ -105,16 +129,18 @@ function sendUnexpectedError(
 }
 
 /**
- * Verifies the user is logged in, is an owner or manager, and has an
- * organization context.
+ * Verifies the user is logged in, has one of the allowed roles (owner or
+ * manager by default), and has an organization context.
  *
  * @param request - The incoming request.
  * @param reply - The Fastify reply instance.
+ * @param allowedRoles - Roles permitted to perform the action.
  * @returns The organization ID, or null after an error response was sent.
  */
 function authorizeMenuRequest(
   request: FastifyRequest,
   reply: FastifyReply,
+  allowedRoles: UserRole[] = MENU_MANAGER_ROLES,
 ): string | null {
   const context = getAuthContext(request);
 
@@ -123,7 +149,7 @@ function authorizeMenuRequest(
     return null;
   }
 
-  if (!hasRole(context, ["owner", "manager"])) {
+  if (!hasRole(context, allowedRoles)) {
     sendForbidden(reply);
     return null;
   }
@@ -192,6 +218,38 @@ function handleMenuServiceError(
         409,
         error.message,
         ErrorCode.CUISINE_NAME_CONFLICT,
+      );
+
+    case "MENU_ITEM_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.MENU_ITEM_NOT_FOUND,
+      );
+
+    case "MENU_ITEM_NAME_CONFLICT":
+      return sendError(
+        reply,
+        409,
+        error.message,
+        ErrorCode.MENU_ITEM_NAME_CONFLICT,
+      );
+
+    case "BRANCH_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.BRANCH_NOT_FOUND,
+      );
+
+    case "TABLE_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.TABLE_NOT_FOUND,
       );
 
     default:
@@ -680,5 +738,246 @@ export async function deleteCuisineController(
     }
 
     return sendUnexpectedError(request, reply, error, "Failed to deactivate cuisine");
+  }
+}
+
+/**
+ * Creates a menu item for the authenticated organization.
+ *
+ * @param request - The incoming request containing menu item details.
+ * @param reply - The Fastify reply instance.
+ * @returns The created menu item or an error response.
+ */
+export async function createMenuItemController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const organizationId = authorizeMenuRequest(request, reply);
+
+  if (!organizationId) {
+    return reply;
+  }
+
+  const parsed = createMenuItemSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      400,
+      "Request validation failed",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  if (parsed.data.organizationId !== organizationId) {
+    return sendError(
+      reply,
+      403,
+      "Access denied for this organization",
+      ErrorCode.FORBIDDEN,
+    );
+  }
+
+  try {
+    const item = await createMenuItem(parsed.data);
+
+    return sendSuccess(
+      reply,
+      201,
+      "Menu item created successfully",
+      item,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to create menu item");
+  }
+}
+
+/**
+ * Retrieves a menu item with its branch prices. Any member of the
+ * organization may read it; cost prices are shown to owners and managers only.
+ *
+ * @param request - The incoming request containing the menu item ID.
+ * @param reply - The Fastify reply instance.
+ * @returns The menu item or an error response.
+ */
+export async function getMenuItemController(
+  request: MenuIdRequest,
+  reply: FastifyReply,
+) {
+  const organizationId = authorizeMenuRequest(request, reply, MENU_READER_ROLES);
+
+  if (!organizationId) {
+    return reply;
+  }
+
+  const parsed = menuIdSchema.safeParse(request.params);
+
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid menu item ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  const context = getAuthContext(request);
+  const canViewCostPrice =
+    context !== null && hasRole(context, MENU_MANAGER_ROLES);
+
+  try {
+    const item = await getMenuItem(
+      parsed.data.id,
+      organizationId,
+      canViewCostPrice,
+    );
+
+    if (!item) {
+      return sendError(
+        reply,
+        404,
+        "Menu item not found",
+        ErrorCode.MENU_ITEM_NOT_FOUND,
+      );
+    }
+
+    return sendSuccess(
+      reply,
+      200,
+      "Menu item retrieved successfully",
+      item,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to get menu item");
+  }
+}
+
+/**
+ * Sets the branch-specific price and availability of a menu item.
+ * The user must have access to the branch.
+ *
+ * @param request - The incoming request containing branch/item IDs and pricing.
+ * @param reply - The Fastify reply instance.
+ * @returns The branch menu item or an error response.
+ */
+export async function upsertBranchMenuItemController(
+  request: BranchMenuItemRequest,
+  reply: FastifyReply,
+) {
+  const organizationId = authorizeMenuRequest(request, reply);
+
+  if (!organizationId) {
+    return reply;
+  }
+
+  const parsedParams = branchMenuItemParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid branch or menu item ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  const branchIds = getAuthContext(request)?.branchIds ?? [];
+
+  if (!branchIds.includes(parsedParams.data.branchId)) {
+    return sendError(
+      reply,
+      403,
+      "Access denied for this branch",
+      ErrorCode.FORBIDDEN,
+    );
+  }
+
+  const parsedBody = upsertBranchMenuItemSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      reply,
+      400,
+      "Request validation failed",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  try {
+    const branchItem = await upsertBranchMenuItem(
+      parsedParams.data.branchId,
+      parsedParams.data.itemId,
+      organizationId,
+      parsedBody.data,
+    );
+
+    return sendSuccess(
+      reply,
+      200,
+      "Branch menu item updated successfully",
+      branchItem,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to update branch menu item");
+  }
+}
+
+/**
+ * Returns the guest-facing branch menu for a table QR code. Public route.
+ *
+ * @param request - The incoming request containing the QR code.
+ * @param reply - The Fastify reply instance.
+ * @returns The branch menu or an error response.
+ */
+export async function getPublicMenuController(
+  request: PublicMenuRequest,
+  reply: FastifyReply,
+) {
+  const parsed = qrCodeParamsSchema.safeParse(request.params);
+
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid QR code",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  try {
+    const menu = await getPublicMenu(parsed.data.qrCode);
+
+    return sendSuccess(
+      reply,
+      200,
+      "Menu retrieved successfully",
+      menu,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to get public menu");
   }
 }
