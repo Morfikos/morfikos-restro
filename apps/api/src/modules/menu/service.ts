@@ -3,9 +3,11 @@ import type {
   CreateCategoryInput,
   CreateCuisineInput,
   CreateMenuItemInput,
+  ListMenuItemsQuery,
   ListMenuQuery,
   UpdateCategoryInput,
   UpdateCuisineInput,
+  UpdateMenuItemInput,
   UpsertBranchMenuItemInput,
 } from "@morfikos/validation";
 
@@ -377,17 +379,56 @@ export async function deactivateCuisine(
  */
 const menuItemSelect = {
   id: true,
-  categoryId: true,
   name: true,
   description: true,
+  category: { select: { id: true, name: true } },
   gst: true,
   hsn: true,
+  imageUrl: true,
   isVeg: true,
+  isJain: true,
+  isRecommended: true,
   allergens: true,
   preparationTime: true,
+  kitchenStation: true,
+  sortOrder: true,
+  timingEnabled: true,
+  availableDays: true,
+  availableTimeStart: true,
+  availableTimeEnd: true,
   isActive: true,
+  variants: {
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      name: true,
+      extraPrice: true,
+      dineInAvailable: true,
+      parcelAvailable: true,
+      deliveryAvailable: true,
+    },
+  },
+  addons: {
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true, price: true, isVeg: true },
+  },
   createdAt: true,
   updatedAt: true,
+} as const;
+
+/**
+ * Branch-level fields of a menu item (price, availability and channels).
+ */
+const branchItemSelect = {
+  menuItemId: true,
+  price: true,
+  costPrice: true,
+  comparePrice: true,
+  isAvailable: true,
+  dineInAvailable: true,
+  parcelAvailable: true,
+  deliveryAvailable: true,
+  maxQuantityPerOrder: true,
 } as const;
 
 /**
@@ -395,6 +436,20 @@ const menuItemSelect = {
  * does not need to be imported.
  */
 type DecimalValue = { toNumber(): number };
+
+/**
+ * Branch-level menu item fields as selected by {@link branchItemSelect}.
+ */
+type BranchItemRecord = {
+  price: DecimalValue;
+  costPrice: DecimalValue | null;
+  comparePrice: DecimalValue | null;
+  isAvailable: boolean;
+  dineInAvailable: boolean;
+  parcelAvailable: boolean;
+  deliveryAvailable: boolean;
+  maxQuantityPerOrder: number | null;
+};
 
 /**
  * Converts a Prisma Decimal to a JSON-friendly number.
@@ -407,20 +462,63 @@ function decimalToNumber(value: DecimalValue | null): number | null {
 }
 
 /**
- * Serializes a menu item by converting its GST rate to a number.
+ * Serializes a menu item by converting its Decimal fields (GST, variant
+ * extra prices and addon prices) to numbers.
  *
- * @param item - A menu item record containing a Decimal GST rate.
- * @returns The menu item with a numeric GST rate.
+ * @param item - A menu item record selected with {@link menuItemSelect}.
+ * @returns The menu item with numeric values.
  */
-function serializeMenuItem<T extends { gst: DecimalValue }>(item: T) {
+function serializeMenuItem<
+  T extends {
+    gst: DecimalValue;
+    variants: Array<{ extraPrice: DecimalValue }>;
+    addons: Array<{ price: DecimalValue }>;
+  },
+>(item: T) {
   return {
     ...item,
     gst: item.gst.toNumber(),
+    variants: item.variants.map((variant) => ({
+      ...variant,
+      extraPrice: variant.extraPrice.toNumber(),
+    })),
+    addons: item.addons.map((addon) => ({
+      ...addon,
+      price: addon.price.toNumber(),
+    })),
   };
 }
 
 /**
- * Creates a menu item under an active category of the organization.
+ * Serializes the branch-level fields of a menu item. An item that has not
+ * been priced at the branch yet is reported as unpriced and unavailable.
+ *
+ * @param branchItem - The branch entry, or undefined if not priced there.
+ * @param includeCostPrice - Whether the cost price may be returned.
+ * @returns The branch price, availability and ordering channels.
+ */
+function serializeBranchFields(
+  branchItem: BranchItemRecord | undefined,
+  includeCostPrice: boolean,
+) {
+  return {
+    price: branchItem ? branchItem.price.toNumber() : null,
+    comparePrice: branchItem ? decimalToNumber(branchItem.comparePrice) : null,
+    // Cost price is margin data, so only owners and managers see it.
+    ...(includeCostPrice && {
+      costPrice: branchItem ? decimalToNumber(branchItem.costPrice) : null,
+    }),
+    isAvailable: branchItem?.isAvailable ?? false,
+    dineInAvailable: branchItem?.dineInAvailable ?? false,
+    parcelAvailable: branchItem?.parcelAvailable ?? false,
+    deliveryAvailable: branchItem?.deliveryAvailable ?? false,
+    maxQuantityPerOrder: branchItem?.maxQuantityPerOrder ?? null,
+  };
+}
+
+/**
+ * Creates a menu item, with its variants and addons, under an active
+ * category of the organization.
  *
  * @param data - The validated menu item details.
  * @returns The created menu item.
@@ -447,6 +545,7 @@ export async function createMenuItem(data: CreateMenuItemInput) {
   }
 
   try {
+    // Nested creates keep the item, its variants and addons atomic.
     const item = await prisma.menuItem.create({
       data: {
         organizationId: data.organizationId,
@@ -455,10 +554,32 @@ export async function createMenuItem(data: CreateMenuItemInput) {
         description: data.description || null,
         gst: data.gst,
         hsn: data.hsn,
+        imageUrl: data.imageUrl ?? null,
         isVeg: data.isVeg,
+        isJain: data.isJain,
+        isRecommended: data.isRecommended,
         allergens: data.allergens,
         preparationTime: data.preparationTime ?? null,
+        kitchenStation: data.kitchenStation,
+        sortOrder: data.sortOrder,
+        timingEnabled: data.timingEnabled,
+        availableDays: data.availableDays,
+        // Times only apply when timing restrictions are enabled.
+        availableTimeStart: data.timingEnabled ? (data.availableTimeStart ?? null) : null,
+        availableTimeEnd: data.timingEnabled ? (data.availableTimeEnd ?? null) : null,
         isActive: data.isActive,
+        variants: {
+          create: data.variants.map((variant, index) => ({
+            ...variant,
+            sortOrder: index,
+          })),
+        },
+        addons: {
+          create: data.addons.map((addon, index) => ({
+            ...addon,
+            sortOrder: index,
+          })),
+        },
       },
       select: menuItemSelect,
     });
@@ -474,6 +595,216 @@ export async function createMenuItem(data: CreateMenuItemInput) {
 
     throw error;
   }
+}
+
+/**
+ * Updates the provided fields of a menu item.
+ *
+ * Fields not provided are left unchanged. When `variants` or `addons` are
+ * provided they replace the item's existing lists. Timing is validated
+ * against the merged (stored + provided) values, and times are cleared
+ * when timing is disabled.
+ *
+ * @param id - The menu item ID.
+ * @param organizationId - The owning organization ID.
+ * @param data - The validated fields to update.
+ * @returns The updated menu item, or null if not found.
+ * @throws MenuServiceError If the new category is not found, timing is
+ * incomplete, or the new name is already taken in the category.
+ */
+export async function updateMenuItem(
+  id: string,
+  organizationId: string,
+  data: UpdateMenuItemInput,
+) {
+  const existing = await prisma.menuItem.findFirst({
+    where: { id, organizationId },
+    select: {
+      id: true,
+      timingEnabled: true,
+      availableTimeStart: true,
+      availableTimeEnd: true,
+    },
+  });
+
+  if (!existing) {
+    return null;
+  }
+
+  if (data.categoryId !== undefined) {
+    const category = await prisma.menuCategory.findFirst({
+      where: { id: data.categoryId, organizationId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!category) {
+      throw new MenuServiceError(
+        MenuServiceErrorCode.CATEGORY_NOT_FOUND,
+        "Active category not found",
+      );
+    }
+  }
+
+  const timingEnabled = data.timingEnabled ?? existing.timingEnabled;
+  const availableTimeStart =
+    data.availableTimeStart !== undefined
+      ? data.availableTimeStart
+      : existing.availableTimeStart;
+  const availableTimeEnd =
+    data.availableTimeEnd !== undefined
+      ? data.availableTimeEnd
+      : existing.availableTimeEnd;
+
+  if (timingEnabled && (!availableTimeStart || !availableTimeEnd)) {
+    throw new MenuServiceError(
+      MenuServiceErrorCode.INVALID_ITEM_TIMING,
+      "availableTimeStart and availableTimeEnd are required when timingEnabled is true",
+    );
+  }
+
+  try {
+    const item = await prisma.menuItem.update({
+      where: { id: existing.id },
+      data: {
+        ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.description !== undefined && {
+          description: data.description || null,
+        }),
+        ...(data.gst !== undefined && { gst: data.gst }),
+        ...(data.hsn !== undefined && { hsn: data.hsn }),
+        ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),
+        ...(data.isVeg !== undefined && { isVeg: data.isVeg }),
+        ...(data.isJain !== undefined && { isJain: data.isJain }),
+        ...(data.isRecommended !== undefined && {
+          isRecommended: data.isRecommended,
+        }),
+        ...(data.allergens !== undefined && { allergens: data.allergens }),
+        ...(data.preparationTime !== undefined && {
+          preparationTime: data.preparationTime,
+        }),
+        ...(data.kitchenStation !== undefined && {
+          kitchenStation: data.kitchenStation,
+        }),
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+        ...(data.availableDays !== undefined && {
+          availableDays: data.availableDays,
+        }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+        // Always write the resolved timing so times are cleared when disabled.
+        timingEnabled,
+        availableTimeStart: timingEnabled ? availableTimeStart : null,
+        availableTimeEnd: timingEnabled ? availableTimeEnd : null,
+        // Sent lists replace the existing ones within the same update.
+        ...(data.variants !== undefined && {
+          variants: {
+            deleteMany: {},
+            create: data.variants.map((variant, index) => ({
+              ...variant,
+              sortOrder: index,
+            })),
+          },
+        }),
+        ...(data.addons !== undefined && {
+          addons: {
+            deleteMany: {},
+            create: data.addons.map((addon, index) => ({
+              ...addon,
+              sortOrder: index,
+            })),
+          },
+        }),
+      },
+      select: menuItemSelect,
+    });
+
+    return serializeMenuItem(item);
+  } catch (error: unknown) {
+    if (isPrismaUniqueConstraintError(error)) {
+      throw new MenuServiceError(
+        MenuServiceErrorCode.MENU_ITEM_NAME_CONFLICT,
+        "A menu item with this name already exists in this category",
+      );
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Retrieves a paginated list of menu items for an organization, ordered
+ * by category and item sort order.
+ *
+ * When a branch is given, each item also carries that branch's price,
+ * availability and ordering channels.
+ *
+ * @param organizationId - The owning organization ID.
+ * @param query - Validated filters and pagination.
+ * @param includeCostPrice - Whether branch cost prices may be returned.
+ * @returns The menu items and pagination metadata.
+ */
+export async function listMenuItems(
+  organizationId: string,
+  query: ListMenuItemsQuery,
+  includeCostPrice: boolean,
+) {
+  const where = {
+    organizationId,
+    ...(query.categoryId !== undefined && { categoryId: query.categoryId }),
+    ...(query.isActive !== undefined && { isActive: query.isActive }),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.menuItem.findMany({
+      where,
+      orderBy: [
+        { category: { sortOrder: "asc" } },
+        { sortOrder: "asc" },
+        { name: "asc" },
+      ],
+      take: query.limit,
+      skip: query.offset,
+      select: menuItemSelect,
+    }),
+    prisma.menuItem.count({ where }),
+  ]);
+
+  const { branchId } = query;
+
+  if (branchId === undefined) {
+    return {
+      total,
+      limit: query.limit,
+      offset: query.offset,
+      items: items.map((item) => serializeMenuItem(item)),
+    };
+  }
+
+  const branchItems = await prisma.branchMenuItem.findMany({
+    where: {
+      branchId,
+      menuItemId: { in: items.map((item) => item.id) },
+    },
+    select: branchItemSelect,
+  });
+
+  const branchItemsByMenuItemId = new Map(
+    branchItems.map((branchItem) => [branchItem.menuItemId, branchItem]),
+  );
+
+  return {
+    total,
+    limit: query.limit,
+    offset: query.offset,
+    branchId,
+    items: items.map((item) => ({
+      ...serializeMenuItem(item),
+      ...serializeBranchFields(
+        branchItemsByMenuItemId.get(item.id),
+        includeCostPrice,
+      ),
+    })),
+  };
 }
 
 /**
@@ -496,11 +827,8 @@ export async function getMenuItem(
       branchItems: {
         orderBy: { createdAt: "asc" },
         select: {
+          ...branchItemSelect,
           branchId: true,
-          price: true,
-          costPrice: true,
-          isAvailable: true,
-          maxQuantityPerOrder: true,
           branch: { select: { name: true } },
         },
       },
@@ -518,19 +846,14 @@ export async function getMenuItem(
     branchPrices: branchItems.map((branchItem) => ({
       branchId: branchItem.branchId,
       branchName: branchItem.branch.name,
-      price: branchItem.price.toNumber(),
-      // Cost price is margin data, so only owners and managers see it.
-      ...(includeCostPrice && {
-        costPrice: decimalToNumber(branchItem.costPrice),
-      }),
-      isAvailable: branchItem.isAvailable,
-      maxQuantityPerOrder: branchItem.maxQuantityPerOrder,
+      ...serializeBranchFields(branchItem, includeCostPrice),
     })),
   };
 }
 
 /**
- * Sets the branch-specific price and availability of a menu item.
+ * Sets the branch-specific price, availability and ordering channels of a
+ * menu item.
  *
  * Creates the branch entry on first use and updates it afterwards.
  * Fields not provided on update are left unchanged.
@@ -581,24 +904,32 @@ export async function upsertBranchMenuItem(
       menuItemId: item.id,
       price: data.price,
       costPrice: data.costPrice ?? null,
+      comparePrice: data.comparePrice ?? null,
       isAvailable: data.isAvailable ?? true,
+      dineInAvailable: data.dineInAvailable ?? true,
+      parcelAvailable: data.parcelAvailable ?? true,
+      deliveryAvailable: data.deliveryAvailable ?? true,
       maxQuantityPerOrder: data.maxQuantityPerOrder ?? null,
     },
     update: {
       price: data.price,
       ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
+      ...(data.comparePrice !== undefined && { comparePrice: data.comparePrice }),
       ...(data.isAvailable !== undefined && { isAvailable: data.isAvailable }),
+      ...(data.dineInAvailable !== undefined && {
+        dineInAvailable: data.dineInAvailable,
+      }),
+      ...(data.parcelAvailable !== undefined && {
+        parcelAvailable: data.parcelAvailable,
+      }),
+      ...(data.deliveryAvailable !== undefined && {
+        deliveryAvailable: data.deliveryAvailable,
+      }),
       ...(data.maxQuantityPerOrder !== undefined && {
         maxQuantityPerOrder: data.maxQuantityPerOrder,
       }),
     },
-    select: {
-      price: true,
-      costPrice: true,
-      isAvailable: true,
-      maxQuantityPerOrder: true,
-      updatedAt: true,
-    },
+    select: { ...branchItemSelect, updatedAt: true },
   });
 
   return {
@@ -606,18 +937,92 @@ export async function upsertBranchMenuItem(
     name: item.name,
     branchId: branch.id,
     branchPrice: branchItem.price.toNumber(),
-    costPrice: decimalToNumber(branchItem.costPrice),
-    isAvailable: branchItem.isAvailable,
-    maxQuantityPerOrder: branchItem.maxQuantityPerOrder,
+    ...serializeBranchFields(branchItem, true),
     updatedAt: branchItem.updatedAt,
   };
 }
 
+/** Timezone used when a branch has an invalid timezone configured. */
+const FALLBACK_TIMEZONE = "Asia/Kolkata";
+
 /**
- * Retrieves the guest-facing menu for the branch a table QR code belongs to.
+ * Returns the current weekday ("mon".."sun") and time ("HH:mm") in a
+ * branch's timezone.
  *
- * Only active categories and active items that are priced and available
- * at that branch are returned. Categories without such items are omitted.
+ * @param timezone - The branch's IANA timezone, e.g. "Asia/Kolkata".
+ * @param now - The current instant.
+ * @returns The local weekday and time of day.
+ */
+function getBranchClock(timezone: string, now: Date) {
+  let formatter: Intl.DateTimeFormat;
+
+  try {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+  } catch {
+    // An unknown timezone throws a RangeError; fall back to the default.
+    return getBranchClock(FALLBACK_TIMEZONE, now);
+  }
+
+  const parts = formatter.formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+
+  return {
+    day: part("weekday").toLowerCase(),
+    time: `${part("hour")}:${part("minute")}`,
+  };
+}
+
+/**
+ * Checks whether a menu item can be ordered at the given local time.
+ * Time windows that end before they start (e.g. 22:00–02:00) run past
+ * midnight.
+ *
+ * @param item - The item's timing settings.
+ * @param clock - The branch's current weekday and time.
+ * @returns True if the item is orderable now.
+ */
+function isWithinItemTiming(
+  item: {
+    timingEnabled: boolean;
+    availableDays: string[];
+    availableTimeStart: string | null;
+    availableTimeEnd: string | null;
+  },
+  clock: { day: string; time: string },
+): boolean {
+  if (!item.timingEnabled) {
+    return true;
+  }
+
+  if (!item.availableDays.includes(clock.day)) {
+    return false;
+  }
+
+  const { availableTimeStart: start, availableTimeEnd: end } = item;
+
+  if (!start || !end) {
+    return true;
+  }
+
+  return start <= end
+    ? clock.time >= start && clock.time < end
+    : clock.time >= start || clock.time < end;
+}
+
+/**
+ * Retrieves the guest-facing dine-in menu for the branch a table QR code
+ * belongs to.
+ *
+ * Only active categories and active items that are priced, available and
+ * dine-in enabled at that branch, and within their timing window, are
+ * returned. Categories left without items are omitted.
  *
  * @param qrCode - The table's QR code.
  * @returns The branch, table and categorized menu items.
@@ -636,6 +1041,7 @@ export async function getPublicMenu(qrCode: string) {
           id: true,
           name: true,
           status: true,
+          timezone: true,
           organizationId: true,
           organization: { select: { status: true } },
         },
@@ -657,10 +1063,12 @@ export async function getPublicMenu(qrCode: string) {
 
   const { branch } = table;
 
-  // An item is orderable when it is active and available at this branch.
+  // A QR order is a dine-in order, so the item must be dine-in enabled.
   const orderableItemWhere = {
     isActive: true,
-    branchItems: { some: { branchId: branch.id, isAvailable: true } },
+    branchItems: {
+      some: { branchId: branch.id, isAvailable: true, dineInAvailable: true },
+    },
   };
 
   const categories = await prisma.menuCategory.findMany({
@@ -675,36 +1083,87 @@ export async function getPublicMenu(qrCode: string) {
       name: true,
       items: {
         where: orderableItemWhere,
-        orderBy: { name: "asc" },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         select: {
           id: true,
           name: true,
           description: true,
+          imageUrl: true,
           isVeg: true,
+          isJain: true,
+          isRecommended: true,
           allergens: true,
           preparationTime: true,
+          timingEnabled: true,
+          availableDays: true,
+          availableTimeStart: true,
+          availableTimeEnd: true,
+          variants: {
+            where: { dineInAvailable: true },
+            orderBy: { sortOrder: "asc" },
+            select: { id: true, name: true, extraPrice: true },
+          },
+          addons: {
+            orderBy: { sortOrder: "asc" },
+            select: { id: true, name: true, price: true, isVeg: true },
+          },
           branchItems: {
             where: { branchId: branch.id },
-            select: { price: true, maxQuantityPerOrder: true },
+            select: {
+              price: true,
+              comparePrice: true,
+              maxQuantityPerOrder: true,
+            },
           },
         },
       },
     },
   });
 
+  const clock = getBranchClock(branch.timezone, new Date());
+
+  const menuCategories = categories
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      items: category.items
+        .filter((item) => isWithinItemTiming(item, clock))
+        .map((item) => {
+          // The where clause guarantees exactly one entry for this branch.
+          const branchItem = item.branchItems[0];
+
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            imageUrl: item.imageUrl,
+            price: branchItem ? branchItem.price.toNumber() : null,
+            comparePrice: branchItem
+              ? decimalToNumber(branchItem.comparePrice)
+              : null,
+            isVeg: item.isVeg,
+            isJain: item.isJain,
+            isRecommended: item.isRecommended,
+            allergens: item.allergens,
+            preparationTime: item.preparationTime,
+            maxQuantityPerOrder: branchItem?.maxQuantityPerOrder ?? null,
+            variants: item.variants.map((variant) => ({
+              ...variant,
+              extraPrice: variant.extraPrice.toNumber(),
+            })),
+            addons: item.addons.map((addon) => ({
+              ...addon,
+              price: addon.price.toNumber(),
+            })),
+          };
+        }),
+    }))
+    .filter((category) => category.items.length > 0);
+
   return {
     branch: { id: branch.id, name: branch.name },
     table: { id: table.id, name: table.name },
-    categories: categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      items: category.items.map(({ branchItems, ...item }) => ({
-        ...item,
-        // The where clause guarantees exactly one entry for this branch.
-        price: branchItems[0]?.price.toNumber() ?? null,
-        maxQuantityPerOrder: branchItems[0]?.maxQuantityPerOrder ?? null,
-      })),
-    })),
+    categories: menuCategories,
   };
 }
 

@@ -2,6 +2,9 @@ import type { FastifyBaseLogger } from "fastify";
 import { prisma } from "@morfikos/database";
 import {
   ROLES,
+  canManageBranches,
+  canManageOrganization,
+  canManageStaff,
   createAccessToken,
   generateRefreshToken,
   hashPassword,
@@ -89,6 +92,8 @@ async function getAccessContext(userId: string): Promise<AccessContext> {
       status: RecordStatus.ACTIVE,
       organization: { status: RecordStatus.ACTIVE },
     },
+    // Stable order: the first organization is the user's default context.
+    orderBy: { createdAt: "asc" },
     select: {
       organizationId: true,
       organization: {
@@ -539,17 +544,28 @@ export class AuthService {
   }
 
   /**
-   * Returns the authenticated user's profile and access.
+   * Returns the authenticated user's profile: their current organization,
+   * accessible branches, selected branch and role-based permissions.
+   *
+   * The current organization is the first one the user joined, matching
+   * the organization context used by other APIs.
    *
    * @param userId - ID of the authenticated user.
    * @param requestedBranchId - Branch the client has selected, if any.
-   * @returns The user profile with organizations and the selected branch.
+   * @returns The user profile wrapped in a `user` key.
    * @throws AuthServiceError When the user no longer exists or is inactive.
    */
   async getCurrentUser(userId: string, requestedBranchId?: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, status: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+      },
     });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
@@ -561,21 +577,62 @@ export class AuthService {
     }
 
     const accessContext = await getAccessContext(user.id);
+    const currentOrganization = accessContext.organizations[0];
+
+    const [organization, branches] = await Promise.all([
+      currentOrganization
+        ? prisma.organization.findUnique({
+            where: { id: currentOrganization.id },
+            select: {
+              id: true,
+              name: true,
+              businessType: true,
+              city: true,
+              state: true,
+            },
+          })
+        : null,
+      prisma.branch.findMany({
+        where: { id: { in: accessContext.branchIds } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, code: true, city: true },
+      }),
+    ]);
 
     // Only honour the requested branch if the user can access it.
     const selectedBranch =
-      requestedBranchId && accessContext.branchIds.includes(requestedBranchId)
-        ? requestedBranchId
-        : (accessContext.branchIds[0] ?? null);
+      branches.find((branch) => branch.id === requestedBranchId) ??
+      branches[0] ??
+      null;
+
+    const isMenuManager =
+      user.role === ROLES.OWNER || user.role === ROLES.MANAGER;
 
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      organizations: accessContext.organizations,
-      branches: accessContext.branchIds,
-      selectedBranch,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isSuperAdmin: user.role === ROLES.ADMIN,
+        lastLoginAt: user.lastLoginAt,
+        organization:
+          organization && currentOrganization
+            ? { ...organization, role: currentOrganization.role }
+            : null,
+        organizations: accessContext.organizations,
+        branches,
+        selectedBranch: selectedBranch
+          ? { id: selectedBranch.id, name: selectedBranch.name }
+          : null,
+        permissions: {
+          manageOrganization: canManageOrganization(user.role),
+          manageBranches: canManageBranches(user.role),
+          manageStaff: canManageStaff(user.role),
+          manageMenu: isMenuManager,
+          viewCostPrice: isMenuManager,
+        },
+      },
     };
   }
 

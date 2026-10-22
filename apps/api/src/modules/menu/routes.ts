@@ -10,7 +10,9 @@ import {
   updateCuisineController,
   deleteCuisineController,
   createMenuItemController,
+  listMenuItemsController,
   getMenuItemController,
+  updateMenuItemController,
   upsertBranchMenuItemController,
   getPublicMenuController,
 } from "./controller.js";
@@ -81,10 +83,22 @@ export async function menuRoutes(app: FastifyInstance) {
   app.post("/api/v1/menu/items", { preHandler: authenticate }, createMenuItemController);
 
   /**
+   * Retrieves a list of menu items, optionally with a branch's prices.
+   * GET /api/v1/menu/items?branchId=&categoryId=&isActive=&limit=&offset=
+   */
+  app.get("/api/v1/menu/items", { preHandler: authenticate }, listMenuItemsController);
+
+  /**
    * Retrieves a menu item with its branch prices.
    * GET /api/v1/menu/items/:id
    */
   app.get<MenuIdRoute>("/api/v1/menu/items/:id", { preHandler: authenticate }, getMenuItemController);
+
+  /**
+   * Updates an existing menu item by its ID.
+   * PUT /api/v1/menu/items/:id
+   */
+  app.put<MenuIdRoute>("/api/v1/menu/items/:id", { preHandler: authenticate }, updateMenuItemController);
 
   /**
    * Sets a menu item's price and availability for a branch.

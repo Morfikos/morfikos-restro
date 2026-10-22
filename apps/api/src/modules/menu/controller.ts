@@ -7,11 +7,13 @@ import {
   createCategorySchema,
   createCuisineSchema,
   createMenuItemSchema,
+  listMenuItemsQuerySchema,
   listMenuQuerySchema,
   menuIdSchema,
   qrCodeParamsSchema,
   updateCategorySchema,
   updateCuisineSchema,
+  updateMenuItemSchema,
   upsertBranchMenuItemSchema,
 } from "@morfikos/validation";
 
@@ -26,8 +28,10 @@ import {
   isMenuServiceError,
   listCategories,
   listCuisines,
+  listMenuItems,
   updateCategory,
   updateCuisine,
+  updateMenuItem,
   upsertBranchMenuItem,
 } from "./service.js";
 
@@ -250,6 +254,14 @@ function handleMenuServiceError(
         404,
         error.message,
         ErrorCode.TABLE_NOT_FOUND,
+      );
+
+    case "INVALID_ITEM_TIMING":
+      return sendError(
+        reply,
+        400,
+        error.message,
+        ErrorCode.VALIDATION_ERROR,
       );
 
     default:
@@ -795,6 +807,150 @@ export async function createMenuItemController(
     }
 
     return sendUnexpectedError(request, reply, error, "Failed to create menu item");
+  }
+}
+
+/**
+ * Lists menu items of the authenticated organization. When `branchId` is
+ * given, each item includes that branch's price and availability; the user
+ * must have access to the branch. Any member of the organization may read
+ * the list; cost prices are shown to owners and managers only.
+ *
+ * @param request - The incoming request containing query parameters.
+ * @param reply - The Fastify reply instance.
+ * @returns The matching menu items or an error response.
+ */
+export async function listMenuItemsController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const organizationId = authorizeMenuRequest(request, reply, MENU_READER_ROLES);
+
+  if (!organizationId) {
+    return reply;
+  }
+
+  const parsed = listMenuItemsQuerySchema.safeParse(request.query);
+
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid menu item query parameters",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  const context = getAuthContext(request);
+
+  if (
+    parsed.data.branchId !== undefined &&
+    !(context?.branchIds ?? []).includes(parsed.data.branchId)
+  ) {
+    return sendError(
+      reply,
+      403,
+      "Access denied for this branch",
+      ErrorCode.FORBIDDEN,
+    );
+  }
+
+  const canViewCostPrice =
+    context !== null && hasRole(context, MENU_MANAGER_ROLES);
+
+  try {
+    const items = await listMenuItems(
+      organizationId,
+      parsed.data,
+      canViewCostPrice,
+    );
+
+    return sendSuccess(
+      reply,
+      200,
+      "Menu items retrieved successfully",
+      items,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to list menu items");
+  }
+}
+
+/**
+ * Updates an existing menu item within the authenticated organization.
+ *
+ * @param request - The incoming request containing the menu item ID and updates.
+ * @param reply - The Fastify reply instance.
+ * @returns The updated menu item or an error response.
+ */
+export async function updateMenuItemController(
+  request: MenuIdRequest,
+  reply: FastifyReply,
+) {
+  const organizationId = authorizeMenuRequest(request, reply);
+
+  if (!organizationId) {
+    return reply;
+  }
+
+  const parsedId = menuIdSchema.safeParse(request.params);
+
+  if (!parsedId.success) {
+    return sendError(
+      reply,
+      400,
+      "Invalid menu item ID",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  const parsedBody = updateMenuItemSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      reply,
+      400,
+      "Request validation failed",
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  try {
+    const item = await updateMenuItem(
+      parsedId.data.id,
+      organizationId,
+      parsedBody.data,
+    );
+
+    if (!item) {
+      return sendError(
+        reply,
+        404,
+        "Menu item not found",
+        ErrorCode.MENU_ITEM_NOT_FOUND,
+      );
+    }
+
+    return sendSuccess(
+      reply,
+      200,
+      "Menu item updated successfully",
+      item,
+    );
+  } catch (error: unknown) {
+    const handled = handleMenuServiceError(error, reply);
+
+    if (handled) {
+      return handled;
+    }
+
+    return sendUnexpectedError(request, reply, error, "Failed to update menu item");
   }
 }
 
