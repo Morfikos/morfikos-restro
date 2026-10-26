@@ -71,3 +71,24 @@ export enum OrderServiceErrorCode {
   PAYMENT_EXCEEDS_BALANCE = "PAYMENT_EXCEEDS_BALANCE",
   ORDER_HAS_PAYMENTS = "ORDER_HAS_PAYMENTS",
 }
+
+/**
+ * Defines standardized error codes for table service operations.
+ */
+export enum TableServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  TABLE_NOT_FOUND = "TABLE_NOT_FOUND",
+  TABLE_NAME_CONFLICT = "TABLE_NAME_CONFLICT",
+  TABLE_HAS_OPEN_ORDER = "TABLE_HAS_OPEN_ORDER",
+}
+
+/**
+ * Defines the live status of a table, derived from its current order:
+ * no open order, an open order being served, or a bill printed and
+ * awaiting payment.
+ */
+export enum TableStatus {
+  AVAILABLE = "available",
+  OCCUPIED = "occupied",
+  BILLED = "billed",
+}

@@ -7,7 +7,7 @@ const emailSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .email("Please enter a valid email address");
+  .pipe(z.email("Please enter a valid email address"));
 
 const nameSchema = z
   .string()
@@ -50,8 +50,8 @@ export const staffSignupSchema = z
     password: passwordSchema,
     confirmPassword: z.string(),
     role: z.enum(ASSIGNABLE_STAFF_ROLES),
-    organizationId: z.string().uuid("Invalid organization ID"),
-    branchId: z.string().uuid("Invalid branch ID").optional(),
+    organizationId: z.uuid("Invalid organization ID"),
+    branchId: z.uuid("Invalid branch ID").optional(),
   })
   .refine((d) => d.password === d.confirmPassword, PASSWORD_MISMATCH);
 

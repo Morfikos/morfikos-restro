@@ -9,6 +9,8 @@ export {
   BranchStatus,
   MenuServiceErrorCode,
   OrderServiceErrorCode,
+  TableServiceErrorCode,
+  TableStatus,
   NON_ALPHANUMERIC_BRANCH_CODE_REGEX,
 } from "./constants.js";
 export type { Role } from "./constants.js";

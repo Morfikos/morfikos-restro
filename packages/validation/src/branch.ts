@@ -17,7 +17,7 @@ const timeSchema = z.string().regex(
 );
 
 export const createBranchSchema = z.object({
-  organizationId: z.string().uuid(),
+  organizationId: z.uuid(),
   name: z.string().trim().min(1).max(120),
   address: z.string().trim().min(1).max(300),
   city: z.string().trim().min(1).max(100),
@@ -31,13 +31,13 @@ export const createBranchSchema = z.object({
   // businessDayCutoff: timeSchema.optional(),
   businessDayCutoff: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   googleReviewUrl: z.union([
-    z.string().url(),
+    z.url(),
     z.literal(""),
   ]).optional(),
 });
 
 export const branchIdSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 export const listBranchesQuerySchema = z.object({
@@ -59,7 +59,7 @@ export const updateBranchSchema = z.object({
   businessDays: z.array(businessDaySchema).min(1).optional(),
   businessDayCutoff: timeSchema.nullable().optional(),
   googleReviewUrl: z.union([
-    z.string().url(),
+    z.url(),
     z.literal(""),
   ]).nullable().optional(),
 });

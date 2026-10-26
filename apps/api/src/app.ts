@@ -11,6 +11,7 @@ import { organizationRoutes } from "./modules/organizations/routes.js";
 import { branchRoutes } from "./modules/branches/routes.js";
 import { menuRoutes } from "./modules/menu/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
+import { tableRoutes } from "./modules/tables/routes.js";
 const webDistPath = fileURLToPath(
   new URL("../../web/dist/", import.meta.url),
 );
@@ -27,6 +28,7 @@ export function buildApp() {
   app.register(branchRoutes);
   app.register(menuRoutes);
   app.register(orderRoutes);
+  app.register(tableRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });
