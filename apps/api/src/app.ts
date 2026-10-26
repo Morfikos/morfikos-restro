@@ -41,7 +41,7 @@ export function buildApp() {
   });
 
   app.register(organizationRoutes);
- app.register(authRoutes, {
+  app.register(authRoutes, {
     prefix: "/api/v1/auth",
   });
 

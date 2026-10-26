@@ -127,12 +127,12 @@ export function serializeTable<
     currentStatus,
     activeOrder: activeOrder
       ? {
-          id: activeOrder.id,
-          orderNumber: activeOrder.orderNumber,
-          status: activeOrder.status,
-          runningAmount: activeOrder.totalAmount.toNumber(),
-          seatedAt: activeOrder.createdAt,
-        }
+        id: activeOrder.id,
+        orderNumber: activeOrder.orderNumber,
+        status: activeOrder.status,
+        runningAmount: activeOrder.totalAmount.toNumber(),
+        seatedAt: activeOrder.createdAt,
+      }
       : null,
   };
 }
