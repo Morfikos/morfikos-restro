@@ -39,13 +39,11 @@ export const createOrganizationSchema = z.object({
   email: z
     .string()
     .trim()
-    .email("Invalid email address"),
+    .pipe(z.email("Invalid email address")),
 })
 
 export const organizationIdSchema = z.object({
-  id: z
-    .string()
-    .uuid("Invalid organization ID"),
+  id: z.uuid("Invalid organization ID"),
 })
 
 export type CreateOrganizationInput = z.infer<

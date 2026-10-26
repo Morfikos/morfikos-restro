@@ -5,7 +5,7 @@ const menuDescriptionSchema = z.string().trim().max(500);
 const sortOrderSchema = z.number().int().min(0).max(10000);
 
 export const menuIdSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 export const listMenuQuerySchema = z.object({
@@ -18,7 +18,7 @@ export const listMenuQuerySchema = z.object({
 });
 
 export const createCategorySchema = z.object({
-  organizationId: z.string().uuid(),
+  organizationId: z.uuid(),
   name: menuNameSchema,
   description: menuDescriptionSchema.optional(),
   sortOrder: sortOrderSchema.default(0),
@@ -115,7 +115,7 @@ const allergensSchema = z
 
 const preparationTimeSchema = z.number().int().min(0).max(600);
 
-const imageUrlSchema = z.string().trim().url().max(2000);
+const imageUrlSchema = z.string().trim().pipe(z.url().max(2000));
 
 const kitchenStationSchema = z.enum(KITCHEN_STATIONS);
 
@@ -139,8 +139,8 @@ const TIMING_REQUIRED_MESSAGE =
 
 export const createMenuItemSchema = z
   .object({
-    organizationId: z.string().uuid(),
-    categoryId: z.string().uuid(),
+    organizationId: z.uuid(),
+    categoryId: z.uuid(),
     name: menuNameSchema,
     description: menuDescriptionSchema.optional(),
     gst: gstSchema,
@@ -175,7 +175,7 @@ export const createMenuItemSchema = z
  */
 export const updateMenuItemSchema = z
   .object({
-    categoryId: z.string().uuid().optional(),
+    categoryId: z.uuid().optional(),
     name: menuNameSchema.optional(),
     description: menuDescriptionSchema.nullable().optional(),
     gst: gstSchema.optional(),
@@ -201,13 +201,13 @@ export const updateMenuItemSchema = z
   });
 
 export const listMenuItemsQuerySchema = listMenuQuerySchema.extend({
-  branchId: z.string().uuid().optional(),
-  categoryId: z.string().uuid().optional(),
+  branchId: z.uuid().optional(),
+  categoryId: z.uuid().optional(),
 });
 
 export const branchMenuItemParamsSchema = z.object({
-  branchId: z.string().uuid(),
-  itemId: z.string().uuid(),
+  branchId: z.uuid(),
+  itemId: z.uuid(),
 });
 
 export const upsertBranchMenuItemSchema = z

@@ -303,6 +303,9 @@ model DiningTable {
   id        String   @id @default(uuid())
   branchId  String
   name      String
+  seats     Int      @default(2)
+  floorName String?
+  sortOrder Int      @default(0)
   qrCode    String   @unique @default(uuid())
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -311,6 +314,7 @@ model DiningTable {
   orders    Order[]
   @@unique([branchId, name])
   @@index([branchId])
+  @@index([branchId, isActive])
 }
 
 enum OrderType {
