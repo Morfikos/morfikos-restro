@@ -11,6 +11,7 @@ export {
   OrderServiceErrorCode,
   TableServiceErrorCode,
   TableStatus,
+  FloorServiceErrorCode,
   NON_ALPHANUMERIC_BRANCH_CODE_REGEX,
 } from "./constants.js";
 export type { Role } from "./constants.js";

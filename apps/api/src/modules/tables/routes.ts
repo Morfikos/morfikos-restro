@@ -25,7 +25,7 @@ export async function tableRoutes(app: FastifyInstance) {
 
   /**
    * Retrieves a branch's tables with their live status.
-   * GET /api/v1/tables?branchId=&status=&floorName=&isActive=&limit=&offset=
+   * GET /api/v1/tables?branchId=&status=&floorId=&isActive=&limit=&offset=
    */
   app.get("/api/v1/tables", { preHandler: authenticate }, listTablesController);
 
