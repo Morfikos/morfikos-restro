@@ -30,6 +30,7 @@ model User {
   orderItemsVoided    OrderItem[] @relation("OrderItemVoidedBy")
   kotsCreated         Kot[]       @relation("KotCreatedBy")
   paymentsReceived    Payment[]   @relation("PaymentReceivedBy")
+  layoutImports       FloorLayoutImport[] @relation("LayoutImportCreatedBy")
 }
 
 model PasswordResetToken {
@@ -94,6 +95,7 @@ model Branch {
   orders           Order[]
   kots             Kot[]
   counters         BranchCounter[]
+  floors           Floor[]
   @@index([organizationId])
   @@index([organizationId, status])
 }
@@ -299,22 +301,108 @@ model BranchMenuItem {
   @@index([menuItemId])
 }
 
+enum TableShape {
+  ROUND
+  SQUARE
+  RECTANGLE
+}
+
+enum FloorObjectType {
+  WALL
+  BAR_COUNTER
+  ENTRANCE
+  KITCHEN
+  WASHROOM
+  PILLAR
+  STAIRS
+  WINDOW
+  OTHER
+}
+
+enum LayoutImportStatus {
+  PENDING
+  PROCESSING
+  READY_FOR_REVIEW
+  APPLIED
+  FAILED
+  DISCARDED
+}
+
 model DiningTable {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   branchId  String
   name      String
-  seats     Int      @default(2)
-  floorName String?
-  sortOrder Int      @default(0)
-  qrCode    String   @unique @default(uuid())
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  seats     Int        @default(2)
+  floorId   String?
+  positionX Float?
+  positionY Float?
+  width     Float      @default(80)
+  height    Float      @default(80)
+  rotation  Float      @default(0)
+  shape     TableShape @default(SQUARE)
+  sortOrder Int        @default(0)
+  qrCode    String     @unique @default(uuid())
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  branch    Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  floor     Floor?     @relation(fields: [floorId], references: [id], onDelete: SetNull)
   orders    Order[]
   @@unique([branchId, name])
   @@index([branchId])
   @@index([branchId, isActive])
+  @@index([floorId])
+}
+
+model Floor {
+  id                 String              @id @default(uuid())
+  branchId           String
+  name               String
+  sortOrder          Int                 @default(0)
+  width              Int                 @default(1000)
+  height             Int                 @default(600)
+  backgroundImageUrl String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  tables             DiningTable[]
+  objects            FloorObject[]
+  layoutImports      FloorLayoutImport[]
+  @@unique([branchId, name])
+  @@index([branchId, isActive])
+}
+
+model FloorObject {
+  id        String          @id @default(uuid())
+  floorId   String
+  type      FloorObjectType
+  label     String?
+  positionX Float
+  positionY Float
+  width     Float
+  height    Float
+  rotation  Float           @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  floor     Floor           @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  @@index([floorId])
+}
+
+model FloorLayoutImport {
+  id             String             @id @default(uuid())
+  floorId        String
+  imageUrl       String
+  status         LayoutImportStatus @default(PENDING)
+  proposedLayout Json?
+  error          String?
+  createdById    String
+  appliedAt      DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  floor          Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  createdBy      User               @relation("LayoutImportCreatedBy", fields: [createdById], references: [id])
+  @@index([floorId, createdAt])
 }
 
 enum OrderType {

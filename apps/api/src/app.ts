@@ -1,6 +1,7 @@
 
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import "@morfikos/auth";
@@ -12,6 +13,13 @@ import { branchRoutes } from "./modules/branches/routes.js";
 import { menuRoutes } from "./modules/menu/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { tableRoutes } from "./modules/tables/routes.js";
+import { floorRoutes } from "./modules/floors/routes.js";
+import {
+  MAX_IMAGE_BYTES,
+  UPLOADS_URL_PREFIX,
+  ensureUploadsDir,
+  getUploadsDir,
+} from "./utils/storage.js";
 const webDistPath = fileURLToPath(
   new URL("../../web/dist/", import.meta.url),
 );
@@ -19,6 +27,18 @@ const webDistPath = fileURLToPath(
 export function buildApp() {
   const app = Fastify({ logger: true });
   const servesWeb = existsSync(webDistPath);
+
+  // Image uploads (one file per request) and serving of uploaded files.
+  app.register(fastifyMultipart, {
+    limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
+  });
+
+  ensureUploadsDir();
+  app.register(fastifyStatic, {
+    root: getUploadsDir(),
+    prefix: UPLOADS_URL_PREFIX,
+    decorateReply: false,
+  });
 
   app.register(organizationRoutes);
  app.register(authRoutes, {
@@ -29,6 +49,7 @@ export function buildApp() {
   app.register(menuRoutes);
   app.register(orderRoutes);
   app.register(tableRoutes);
+  app.register(floorRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });

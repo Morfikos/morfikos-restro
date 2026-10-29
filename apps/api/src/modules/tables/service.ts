@@ -36,14 +36,22 @@ export class TableServiceError extends Error {
 
 /**
  * Fields returned for tables in API responses, including the table's
- * current open or billed order (at most one per table).
+ * floor, map position and current open or billed order (at most one per
+ * table).
  */
-const tableSelect = {
+export const tableSelect = {
   id: true,
   branchId: true,
   name: true,
   seats: true,
-  floorName: true,
+  floorId: true,
+  floor: { select: { id: true, name: true } },
+  shape: true,
+  positionX: true,
+  positionY: true,
+  width: true,
+  height: true,
+  rotation: true,
   sortOrder: true,
   qrCode: true,
   isActive: true,
@@ -92,7 +100,7 @@ function buildQrUrl(qrCode: string): string {
  * @param table - A table record selected with {@link tableSelect}.
  * @returns The table as returned by the API.
  */
-function serializeTable<
+export function serializeTable<
   T extends {
     qrCode: string;
     orders: Array<{
@@ -168,8 +176,29 @@ async function findAccessibleTable(
       branchId: { in: branchIds },
       branch: { organizationId },
     },
+    select: { id: true, branchId: true },
+  });
+}
+
+/**
+ * Ensures a floor exists, is active and belongs to the table's branch.
+ *
+ * @param floorId - The floor ID.
+ * @param branchId - The table's branch ID.
+ * @throws TableServiceError If the floor is not found in the branch.
+ */
+async function assertFloorInBranch(floorId: string, branchId: string) {
+  const floor = await prisma.floor.findFirst({
+    where: { id: floorId, branchId, isActive: true },
     select: { id: true },
   });
+
+  if (!floor) {
+    throw new TableServiceError(
+      TableServiceErrorCode.FLOOR_NOT_FOUND,
+      "Active floor not found in this branch",
+    );
+  }
 }
 
 /**
@@ -200,7 +229,8 @@ async function assertNoActiveOrder(tableId: string, message: string) {
  * @param data - The validated table details.
  * @param organizationId - The owning organization ID.
  * @returns The created table.
- * @throws TableServiceError If the branch is not found or the name is taken.
+ * @throws TableServiceError If the branch or floor is not found or the name
+ * is taken.
  */
 export async function createTable(
   data: CreateTableInput,
@@ -218,13 +248,23 @@ export async function createTable(
     );
   }
 
+  if (data.floorId !== undefined) {
+    await assertFloorInBranch(data.floorId, branch.id);
+  }
+
   try {
     const table = await prisma.diningTable.create({
       data: {
         branchId: branch.id,
         name: data.name,
         seats: data.seats,
-        floorName: data.floorName ?? null,
+        floorId: data.floorId ?? null,
+        shape: data.shape,
+        positionX: data.positionX ?? null,
+        positionY: data.positionY ?? null,
+        width: data.width,
+        height: data.height,
+        rotation: data.rotation,
         sortOrder: data.sortOrder,
         isActive: data.isActive,
       },
@@ -260,14 +300,18 @@ export async function listTables(
     branchId: query.branchId,
     branch: { organizationId },
     ...(query.isActive !== undefined && { isActive: query.isActive }),
-    ...(query.floorName !== undefined && { floorName: query.floorName }),
+    ...(query.floorId !== undefined && { floorId: query.floorId }),
     ...(query.status !== undefined && { orders: getStatusFilter(query.status) }),
   };
 
   const [tables, total] = await Promise.all([
     prisma.diningTable.findMany({
       where,
-      orderBy: [{ floorName: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+      orderBy: [
+        { floor: { sortOrder: "asc" } },
+        { sortOrder: "asc" },
+        { name: "asc" },
+      ],
       take: query.limit,
       skip: query.offset,
       select: tableSelect,
@@ -319,7 +363,8 @@ export async function getTable(
  * @param branchIds - The branches the user can access.
  * @param data - The validated fields to update.
  * @returns The updated table, or null if not found.
- * @throws TableServiceError If the name is taken or the table is in use.
+ * @throws TableServiceError If the floor is not found, the name is taken or
+ * the table is in use.
  */
 export async function updateTable(
   id: string,
@@ -340,13 +385,23 @@ export async function updateTable(
     );
   }
 
+  if (data.floorId) {
+    await assertFloorInBranch(data.floorId, existing.branchId);
+  }
+
   try {
     const table = await prisma.diningTable.update({
       where: { id: existing.id },
       data: {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.seats !== undefined && { seats: data.seats }),
-        ...(data.floorName !== undefined && { floorName: data.floorName }),
+        ...(data.floorId !== undefined && { floorId: data.floorId }),
+        ...(data.shape !== undefined && { shape: data.shape }),
+        ...(data.positionX !== undefined && { positionX: data.positionX }),
+        ...(data.positionY !== undefined && { positionY: data.positionY }),
+        ...(data.width !== undefined && { width: data.width }),
+        ...(data.height !== undefined && { height: data.height }),
+        ...(data.rotation !== undefined && { rotation: data.rotation }),
         ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },

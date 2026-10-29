@@ -1,11 +1,17 @@
 import { z } from "zod";
 
+import {
+  dimensionSchema,
+  positionSchema,
+  rotationSchema,
+  tableShapeSchema,
+} from "./floors.js";
+
 /** Live table statuses, derived from the table's current order. */
 export const TABLE_STATUSES = ["available", "occupied", "billed"] as const;
 
 const tableNameSchema = z.string().trim().min(1).max(30);
 const seatsSchema = z.number().int().min(1).max(50);
-const floorNameSchema = z.string().trim().min(1).max(50);
 const sortOrderSchema = z.number().int().min(0).max(10000);
 
 export const tableIdSchema = z.object({
@@ -17,7 +23,13 @@ export const createTableSchema = z.object({
   /** Table number or label shown on the floor plan, e.g. "10" or "Patio 2". */
   name: tableNameSchema,
   seats: seatsSchema.default(2),
-  floorName: floorNameSchema.optional(),
+  floorId: z.uuid().optional(),
+  shape: tableShapeSchema.default("SQUARE"),
+  positionX: positionSchema.optional(),
+  positionY: positionSchema.optional(),
+  width: dimensionSchema.default(80),
+  height: dimensionSchema.default(80),
+  rotation: rotationSchema.default(0),
   sortOrder: sortOrderSchema.default(0),
   isActive: z.boolean().default(true),
 });
@@ -27,7 +39,13 @@ export const updateTableSchema = z
     name: tableNameSchema.optional(),
     seats: seatsSchema.optional(),
     /** null removes the table from its floor. */
-    floorName: floorNameSchema.nullable().optional(),
+    floorId: z.uuid().nullable().optional(),
+    shape: tableShapeSchema.optional(),
+    positionX: positionSchema.nullable().optional(),
+    positionY: positionSchema.nullable().optional(),
+    width: dimensionSchema.optional(),
+    height: dimensionSchema.optional(),
+    rotation: rotationSchema.optional(),
     sortOrder: sortOrderSchema.optional(),
     isActive: z.boolean().optional(),
   })
@@ -38,7 +56,7 @@ export const updateTableSchema = z
 export const listTablesQuerySchema = z.object({
   branchId: z.uuid(),
   status: z.enum(TABLE_STATUSES).optional(),
-  floorName: floorNameSchema.optional(),
+  floorId: z.uuid().optional(),
   isActive: z
     .enum(["true", "false"])
     .transform((value) => value === "true")

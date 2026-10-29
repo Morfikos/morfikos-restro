@@ -252,6 +252,14 @@ function handleTableServiceError(
         ErrorCode.TABLE_HAS_OPEN_ORDER,
       );
 
+    case "FLOOR_NOT_FOUND":
+      return sendError(
+        reply,
+        404,
+        error.message,
+        ErrorCode.FLOOR_NOT_FOUND,
+      );
+
     default:
       return null;
   }
