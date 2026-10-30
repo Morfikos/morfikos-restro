@@ -101,6 +101,16 @@ export enum FloorServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for kitchen display (KDS) operations.
+ */
+export enum KitchenServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  TICKET_NOT_FOUND = "TICKET_NOT_FOUND",
+  TICKET_CLOSED = "TICKET_CLOSED",
+  INVALID_ITEM_INDEX = "INVALID_ITEM_INDEX",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.
