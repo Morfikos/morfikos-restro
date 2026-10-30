@@ -29,10 +29,10 @@ const customerPhoneSchema = z
   .regex(/^\+?\d{7,15}$/, "Phone number must be 7 to 15 digits");
 
 const menuOrderLineSchema = z.object({
-  menuItemId: z.string().uuid(),
-  variantId: z.string().uuid().optional(),
+  menuItemId: z.uuid(),
+  variantId: z.uuid().optional(),
   addonIds: z
-    .array(z.string().uuid())
+    .array(z.uuid())
     .max(20)
     .transform((ids) => [...new Set(ids)])
     .default([]),
@@ -82,10 +82,10 @@ const paymentsSchema = z.array(paymentSchema).min(1).max(5);
 
 export const createOrderSchema = z
   .object({
-    branchId: z.string().uuid(),
+    branchId: z.uuid(),
     orderType: z.enum(ORDER_TYPES).default("DINE_IN"),
     /** Omit for a counter / walk-in order. */
-    tableId: z.string().uuid().optional(),
+    tableId: z.uuid().optional(),
     customerName: customerNameSchema.optional(),
     customerPhone: customerPhoneSchema.optional(),
     note: noteSchema.optional(),
@@ -112,7 +112,7 @@ export const updateOrderSchema = z
   .object({
     orderType: z.enum(ORDER_TYPES).optional(),
     /** null moves the order to the counter. */
-    tableId: z.string().uuid().nullable().optional(),
+    tableId: z.uuid().nullable().optional(),
     customerName: customerNameSchema.nullable().optional(),
     customerPhone: customerPhoneSchema.nullable().optional(),
     note: noteSchema.nullable().optional(),
@@ -155,20 +155,20 @@ export const cancelOrderSchema = z.object({
 });
 
 export const orderIdParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 export const orderItemParamsSchema = z.object({
-  id: z.string().uuid(),
-  itemId: z.string().uuid(),
+  id: z.uuid(),
+  itemId: z.uuid(),
 });
 
 export const listOrdersQuerySchema = z.object({
-  branchId: z.string().uuid(),
+  branchId: z.uuid(),
   status: z.enum(ORDER_STATUSES).optional(),
   paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
   orderType: z.enum(ORDER_TYPES).optional(),
-  tableId: z.string().uuid().optional(),
+  tableId: z.uuid().optional(),
   /** Business day in YYYY-MM-DD. */
   businessDate: z
     .string()

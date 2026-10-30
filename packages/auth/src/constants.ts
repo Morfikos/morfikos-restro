@@ -71,3 +71,42 @@ export enum OrderServiceErrorCode {
   PAYMENT_EXCEEDS_BALANCE = "PAYMENT_EXCEEDS_BALANCE",
   ORDER_HAS_PAYMENTS = "ORDER_HAS_PAYMENTS",
 }
+
+/**
+ * Defines standardized error codes for table service operations.
+ */
+export enum TableServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  TABLE_NOT_FOUND = "TABLE_NOT_FOUND",
+  TABLE_NAME_CONFLICT = "TABLE_NAME_CONFLICT",
+  TABLE_HAS_OPEN_ORDER = "TABLE_HAS_OPEN_ORDER",
+  FLOOR_NOT_FOUND = "FLOOR_NOT_FOUND",
+}
+
+/**
+ * Defines standardized error codes for floor and floor-map operations.
+ */
+export enum FloorServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  FLOOR_NOT_FOUND = "FLOOR_NOT_FOUND",
+  FLOOR_NAME_CONFLICT = "FLOOR_NAME_CONFLICT",
+  FLOOR_HAS_OPEN_ORDERS = "FLOOR_HAS_OPEN_ORDERS",
+  TABLE_NOT_FOUND = "TABLE_NOT_FOUND",
+  TABLE_NAME_CONFLICT = "TABLE_NAME_CONFLICT",
+  INVALID_IMAGE = "INVALID_IMAGE",
+  IMPORT_NOT_FOUND = "IMPORT_NOT_FOUND",
+  IMPORT_NOT_READY = "IMPORT_NOT_READY",
+  IMPORT_LIMIT_REACHED = "IMPORT_LIMIT_REACHED",
+  AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED",
+}
+
+/**
+ * Defines the live status of a table, derived from its current order:
+ * no open order, an open order being served, or a bill printed and
+ * awaiting payment.
+ */
+export enum TableStatus {
+  AVAILABLE = "available",
+  OCCUPIED = "occupied",
+  BILLED = "billed",
+}
