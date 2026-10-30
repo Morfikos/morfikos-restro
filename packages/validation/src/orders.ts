@@ -89,6 +89,8 @@ export const createOrderSchema = z
     customerName: customerNameSchema.optional(),
     customerPhone: customerPhoneSchema.optional(),
     note: noteSchema.optional(),
+    /** Allergies the kitchen must see on every ticket, e.g. "No peanuts". */
+    allergyNote: noteSchema.optional(),
     discountAmount: moneySchema.default(0),
     items: orderLinesSchema,
     action: z.enum(POS_ACTIONS).default("HOLD"),
@@ -116,6 +118,7 @@ export const updateOrderSchema = z
     customerName: customerNameSchema.nullable().optional(),
     customerPhone: customerPhoneSchema.nullable().optional(),
     note: noteSchema.nullable().optional(),
+    allergyNote: noteSchema.nullable().optional(),
     discountAmount: moneySchema.optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {

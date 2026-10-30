@@ -94,6 +94,7 @@ model Branch {
   diningTables     DiningTable[]
   orders           Order[]
   kots             Kot[]
+  kitchenTickets   KitchenTicket[]
   counters         BranchCounter[]
   floors           Floor[]
   @@index([organizationId])
@@ -449,6 +450,14 @@ enum KotStatus {
   CANCELLED
 }
 
+enum KitchenTicketStatus {
+  OPEN
+  IN_PROGRESS
+  READY
+  SERVED
+  CANCELLED
+}
+
 model Order {
   id             String        @id @default(uuid())
   organizationId String
@@ -463,6 +472,7 @@ model Order {
   customerName   String?
   customerPhone  String?
   note           String?
+  allergyNote    String?
   subtotal       Decimal       @default(0) @db.Decimal(12, 2)
   discountAmount Decimal       @default(0) @db.Decimal(12, 2)
   taxAmount      Decimal       @default(0) @db.Decimal(12, 2)
@@ -486,6 +496,7 @@ model Order {
   cancelledBy    User?         @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
   items          OrderItem[]
   kots           Kot[]
+  kitchenTickets KitchenTicket[]
   payments       Payment[]
   @@unique([branchId, orderNumber])
   @@unique([branchId, invoiceNumber])
@@ -516,6 +527,8 @@ model OrderItem {
   note           String?
   status         OrderItemStatus @default(PENDING)
   kotId          String?
+  kitchenTicketId String?
+  kitchenReadyAt DateTime?
   voidedAt       DateTime?
   voidedById     String?
   voidReason     String?
@@ -524,9 +537,11 @@ model OrderItem {
   order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem       MenuItem?       @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
   kot            Kot?            @relation(fields: [kotId], references: [id], onDelete: SetNull)
+  kitchenTicket  KitchenTicket?  @relation(fields: [kitchenTicketId], references: [id], onDelete: SetNull)
   voidedBy       User?           @relation("OrderItemVoidedBy", fields: [voidedById], references: [id])
   @@unique([orderId, lineNumber])
   @@index([kotId])
+  @@index([kitchenTicketId])
   @@index([menuItemId])
 }
 
@@ -535,6 +550,7 @@ model Kot {
   orderId      String
   branchId     String
   kotNumber    Int
+  roundNo      Int         @default(1)
   businessDate String
   status       KotStatus   @default(PENDING)
   createdById  String
@@ -544,7 +560,30 @@ model Kot {
   branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
   createdBy    User        @relation("KotCreatedBy", fields: [createdById], references: [id])
   items        OrderItem[]
+  tickets      KitchenTicket[]
   @@unique([branchId, businessDate, kotNumber])
+  @@index([orderId])
+}
+
+model KitchenTicket {
+  id             String              @id @default(uuid())
+  branchId       String
+  orderId        String
+  kotId          String
+  station        String
+  status         KitchenTicketStatus @default(OPEN)
+  startedAt      DateTime?
+  readyAt        DateTime?
+  bumpedAt       DateTime?
+  lateNotifiedAt DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  branch         Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kot            Kot                 @relation(fields: [kotId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+  @@unique([kotId, station])
+  @@index([branchId, status, createdAt])
   @@index([orderId])
 }
 

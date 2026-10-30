@@ -38,6 +38,14 @@ import {
   PaymentStatus,
   PosAction,
 } from "./constants.js";
+import {
+  cancelKitchenTicketIfEmpty,
+  cancelOrderKitchenTickets,
+  createKitchenTicketsForKot,
+  publishKotTicketsCreated,
+  publishTicketUpdated,
+  publishTicketsCancelled,
+} from "../kitchen/service.js";
 
 const prisma = createPrismaClient();
 
@@ -721,7 +729,7 @@ async function sendPendingItemsToKitchen(
 ): Promise<string | null> {
   const pendingItems = await tx.orderItem.findMany({
     where: { orderId, status: OrderItemStatus.PENDING },
-    select: { id: true },
+    select: { id: true, kitchenStation: true },
   });
 
   if (pendingItems.length === 0) {
@@ -731,11 +739,15 @@ async function sendPendingItemsToKitchen(
   const businessDate = getBusinessDate(branch.timezone, branch.businessDayCutoff);
   const kotNumber = await nextBranchCounter(tx, branch.id, `kot:${businessDate}`);
 
+  // Round 1 is the first KOT of the order, round 2 the next, and so on.
+  const previousKots = await tx.kot.count({ where: { orderId } });
+
   const kot = await tx.kot.create({
     data: {
       orderId,
       branchId: branch.id,
       kotNumber,
+      roundNo: previousKots + 1,
       businessDate,
       createdById: actor.userId,
     },
@@ -746,6 +758,13 @@ async function sendPendingItemsToKitchen(
     where: { id: { in: pendingItems.map((item) => item.id) } },
     data: { status: OrderItemStatus.SENT, kotId: kot.id },
   });
+
+  // Split the KOT into one kitchen display ticket per station.
+  await createKitchenTicketsForKot(
+    tx,
+    { id: kot.id, orderId, branchId: branch.id },
+    pendingItems,
+  );
 
   return kot.id;
 }
@@ -984,6 +1003,7 @@ const orderDetailSelect = {
   customerName: true,
   customerPhone: true,
   note: true,
+  allergyNote: true,
   subtotal: true,
   discountAmount: true,
   taxAmount: true,
@@ -1169,6 +1189,7 @@ async function getKotTicket(client: TransactionClient, kotId: string) {
           orderType: true,
           customerName: true,
           note: true,
+          allergyNote: true,
           table: { select: { name: true } },
         },
       },
@@ -1200,6 +1221,7 @@ async function getKotTicket(client: TransactionClient, kotId: string) {
     tableName: kot.order.table?.name ?? null,
     customerName: kot.order.customerName,
     orderNote: kot.order.note,
+    allergyNote: kot.order.allergyNote,
     items: kot.items.map((item) => ({
       ...item,
       addons: getAddonNames(item.addons),
@@ -1266,6 +1288,7 @@ export async function createOrder(actor: OrderActor, input: CreateOrderInput) {
         customerName: input.customerName ?? null,
         customerPhone: input.customerPhone ?? null,
         note: input.note ?? null,
+        allergyNote: input.allergyNote ?? null,
         discountAmount: input.discountAmount,
         createdById: actor.userId,
       },
@@ -1292,6 +1315,10 @@ export async function createOrder(actor: OrderActor, input: CreateOrderInput) {
 
     return { orderId: order.id, kotId };
   });
+
+  if (result.kotId) {
+    await publishKotTicketsCreated(result.kotId);
+  }
 
   return buildOrderWithKot(result);
 }
@@ -1442,6 +1469,7 @@ export async function updateOrder(
         ...(input.customerName !== undefined && { customerName: input.customerName }),
         ...(input.customerPhone !== undefined && { customerPhone: input.customerPhone }),
         ...(input.note !== undefined && { note: input.note }),
+        ...(input.allergyNote !== undefined && { allergyNote: input.allergyNote }),
         ...(input.discountAmount !== undefined && {
           discountAmount: input.discountAmount,
         }),
@@ -1493,6 +1521,10 @@ export async function addOrderItems(
 
     return { orderId: order.id, kotId };
   });
+
+  if (result.kotId) {
+    await publishKotTicketsCreated(result.kotId);
+  }
 
   return buildOrderWithKot(result);
 }
@@ -1608,13 +1640,13 @@ export async function removeOrderItem(
   itemId: string,
   input: RemoveOrderItemInput,
 ) {
-  await runOrderTransaction(async (tx) => {
+  const affectedTicketId = await runOrderTransaction(async (tx) => {
     const order = await loadOrderForAction(tx, actor, orderId);
     assertOrderStatus(order, [OrderStatus.OPEN], "Only open orders can be edited");
 
     const item = await tx.orderItem.findFirst({
       where: { id: itemId, orderId: order.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, kitchenTicketId: true },
     });
 
     if (!item) {
@@ -1657,10 +1689,21 @@ export async function removeOrderItem(
           taxAmount: 0,
         },
       });
+
+      // The kitchen stops cooking it; an emptied ticket is cancelled.
+      if (item.kitchenTicketId) {
+        await cancelKitchenTicketIfEmpty(tx, item.kitchenTicketId);
+      }
     }
 
     await recalculateOrderTotals(tx, order.id);
+
+    return item.status === OrderItemStatus.SENT ? item.kitchenTicketId : null;
   });
+
+  if (affectedTicketId) {
+    await publishTicketUpdated(affectedTicketId);
+  }
 
   return getOrderDetail(prisma, orderId);
 }
@@ -1694,6 +1737,8 @@ export async function sendOrderKot(actor: OrderActor, orderId: string) {
 
     return { orderId: order.id, kotId };
   });
+
+  await publishKotTicketsCreated(result.kotId);
 
   return buildOrderWithKot(result);
 }
@@ -1773,7 +1818,7 @@ export async function cancelOrder(
 ) {
   assertManager(actor, "Only an owner or manager can cancel orders");
 
-  await runOrderTransaction(async (tx) => {
+  const cancelledTicketIds = await runOrderTransaction(async (tx) => {
     const order = await loadOrderForAction(tx, actor, orderId);
     assertOrderStatus(
       order,
@@ -1805,7 +1850,11 @@ export async function cancelOrder(
       },
       data: { status: KotStatus.CANCELLED },
     });
+
+    return cancelOrderKitchenTickets(tx, order.id);
   });
+
+  await publishTicketsCancelled(cancelledTicketIds);
 
   return getOrderDetail(prisma, orderId);
 }
