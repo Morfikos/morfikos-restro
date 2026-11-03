@@ -7,6 +7,7 @@ import {
   logoutSchema,
   refreshTokenSchema,
   resetPasswordSchema,
+  setManagerPinSchema,
   signupSchema,
   staffSignupSchema,
 } from "@morfikos/validation";
@@ -282,6 +283,39 @@ export async function changePasswordController(
     return sendSuccess(reply, HTTP_STATUS.OK, AUTH_MESSAGES.PASSWORD_CHANGED, null);
   } catch (error: unknown) {
     return handleAuthError(request, reply, error, "Failed to change password");
+  }
+}
+
+/**
+ * Sets the signed-in owner's or manager's approval PIN (used for discount
+ * approvals and credit notes).
+ *
+ * @param request - The authenticated request with the PIN and password.
+ * @param reply - The Fastify reply instance.
+ * @returns A success response or an error response.
+ */
+export async function setManagerPinController(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const user = getAuthContext(request);
+
+  if (!user) {
+    return sendUnauthenticated(reply);
+  }
+
+  const parsed = setManagerPinSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    return sendValidationFailed(reply, parsed.error);
+  }
+
+  try {
+    await authService.setManagerPin(user, parsed.data);
+
+    return sendSuccess(reply, HTTP_STATUS.OK, AUTH_MESSAGES.MANAGER_PIN_SET, null);
+  } catch (error: unknown) {
+    return handleAuthError(request, reply, error, "Failed to set manager PIN");
   }
 }
 

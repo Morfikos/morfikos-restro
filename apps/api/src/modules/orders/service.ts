@@ -16,7 +16,7 @@ import type {
   UpdateOrderItemInput,
 } from "@morfikos/validation";
 
-import { getBusinessDate, getFinancialYear } from "../../utils/branch-time.js";
+import { getBusinessDate } from "../../utils/branch-time.js";
 import { isPrismaUniqueConstraintError } from "../../utils/prisma-errors.js";
 import {
   buildTaxBreakdown,
@@ -46,6 +46,8 @@ import {
   publishTicketUpdated,
   publishTicketsCancelled,
 } from "../kitchen/service.js";
+import { createBillInTx, recordPaymentsInTx } from "../billing/service.js";
+import type { PaymentMethod } from "../billing/constants.js";
 
 const prisma = createPrismaClient();
 
@@ -115,15 +117,6 @@ export function isOrderServiceError(
   );
 }
 
-/**
- * Converts a nullable Prisma Decimal to a number.
- *
- * @param value - The Decimal value, or null.
- * @returns The numeric value, or null.
- */
-function decimalToNumber(value: DecimalValue | null): number | null {
-  return value === null ? null : value.toNumber();
-}
 
 /**
  * Formats a paise amount as a rupee string for error messages.
@@ -247,23 +240,6 @@ function formatOrderNumber(
   return `${getNumberPrefix(code)}-${day}-${String(sequence).padStart(3, "0")}`;
 }
 
-/**
- * Formats a GST invoice number, e.g. "SOHNA-2627-00001". It stays within
- * the 16-character GST limit and restarts every financial year.
- *
- * @param code - The branch code.
- * @param financialYear - The financial year (YY-YY).
- * @param sequence - The invoice's sequence number for the year.
- * @returns The invoice number.
- */
-function formatInvoiceNumber(
-  code: string | null,
-  financialYear: string,
-  sequence: number,
-): string {
-  const year = financialYear.replace("-", "");
-  return `${getNumberPrefix(code)}-${year}-${String(sequence).padStart(5, "0")}`;
-}
 
 /**
  * Atomically increments and returns a named per-branch counter.
@@ -770,16 +746,20 @@ async function sendPendingItemsToKitchen(
 }
 
 /**
- * Generates the bill: finalizes totals and assigns the next GST invoice
- * number for the financial year. A zero-value bill is completed at once.
+ * Generates the bill for one order through the billing module, so the POS
+ * "Bill" button and table bills share one bill and invoice series. The
+ * GST invoice is issued when the bill is settled (paid in full); a
+ * zero-value bill is settled at once.
  *
  * @param tx - The transaction client.
+ * @param actor - The authenticated user.
  * @param orderId - The order ID.
  * @param branch - The order's branch.
  * @throws OrderServiceError When the order has no billable lines.
  */
 async function generateBill(
   tx: TransactionClient,
+  actor: OrderActor,
   orderId: string,
   branch: BranchClock,
 ): Promise<void> {
@@ -792,41 +772,19 @@ async function generateBill(
     );
   }
 
-  const businessDate = getBusinessDate(branch.timezone, branch.businessDayCutoff);
-  const financialYear = getFinancialYear(businessDate);
-
-  const sequence = await tx.invoiceSequence.upsert({
-    where: { branchId_financialYear: { branchId: branch.id, financialYear } },
-    create: { branchId: branch.id, financialYear, lastNumber: 1 },
-    update: { lastNumber: { increment: 1 } },
-    select: { lastNumber: true },
-  });
-
-  const now = new Date();
-  const isFree = totals.total === 0;
-
-  await tx.order.update({
-    where: { id: orderId },
-    data: {
-      status: isFree ? OrderStatus.COMPLETED : OrderStatus.BILLED,
-      invoiceNumber: formatInvoiceNumber(branch.code, financialYear, sequence.lastNumber),
-      financialYear,
-      billedAt: now,
-      ...(isFree && { paymentStatus: PaymentStatus.PAID, paidAt: now }),
-    },
-  });
+  await createBillInTx(tx, actor, { branchId: branch.id, orderIds: [orderId] });
 }
 
 /**
- * Records payments against a billed order. Several payments make a split
- * bill. When the balance is fully paid the order is completed.
+ * Records payments against an order's bill. Several payments make a split
+ * payment. When the bill is fully paid it is settled, its invoice issued
+ * and the order completed.
  *
  * @param tx - The transaction client.
  * @param actor - The authenticated user receiving the payment.
  * @param orderId - The order ID.
- * @param payments - The payments to record.
- * @throws OrderServiceError When the order is not billed or the payments
- * exceed the balance due.
+ * @param payments - The payments to record, in rupees.
+ * @throws OrderServiceError When the order has no open bill.
  */
 async function applyPayments(
   tx: TransactionClient,
@@ -836,10 +794,10 @@ async function applyPayments(
 ): Promise<void> {
   const order = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
-    select: { status: true, totalAmount: true, amountPaid: true },
+    select: { status: true, billId: true },
   });
 
-  if (order.status !== OrderStatus.BILLED) {
+  if (order.status !== OrderStatus.BILLED || !order.billId) {
     const reason =
       order.status === OrderStatus.OPEN
         ? "Generate the bill before taking payment"
@@ -853,43 +811,18 @@ async function applyPayments(
     );
   }
 
-  const total = toPaise(order.totalAmount);
-  const alreadyPaid = toPaise(order.amountPaid);
-  const balanceDue = total - alreadyPaid;
-  const incoming = payments.reduce((sum, payment) => sum + toPaise(payment.amount), 0);
-
-  if (incoming > balanceDue) {
-    throw new OrderServiceError(
-      OrderServiceErrorCode.PAYMENT_EXCEEDS_BALANCE,
-      `Payment of ${formatRupees(incoming)} exceeds the balance due of ${formatRupees(balanceDue)}`,
-    );
-  }
-
-  await tx.payment.createMany({
-    data: payments.map((payment) => ({
-      orderId,
-      method: payment.method,
-      amount: fromPaise(toPaise(payment.amount)),
-      tenderedAmount:
-        payment.tenderedAmount !== undefined
-          ? fromPaise(toPaise(payment.tenderedAmount))
-          : null,
+  await recordPaymentsInTx(
+    tx,
+    actor,
+    order.billId,
+    payments.map((payment) => ({
+      method: payment.method as PaymentMethod,
+      amountPaise: toPaise(payment.amount),
+      tenderedPaise:
+        payment.tenderedAmount !== undefined ? toPaise(payment.tenderedAmount) : undefined,
       reference: payment.reference ?? null,
-      receivedById: actor.userId,
     })),
-  });
-
-  const paid = alreadyPaid + incoming;
-  const isFullyPaid = paid === total;
-
-  await tx.order.update({
-    where: { id: orderId },
-    data: {
-      amountPaid: fromPaise(paid),
-      paymentStatus: isFullyPaid ? PaymentStatus.PAID : PaymentStatus.PARTIALLY_PAID,
-      ...(isFullyPaid && { status: OrderStatus.COMPLETED, paidAt: new Date() }),
-    },
-  });
+  );
 }
 
 /**
@@ -1068,16 +1001,26 @@ const orderDetailSelect = {
       _count: { select: { items: true } },
     },
   },
-  payments: {
-    orderBy: { createdAt: "asc" },
+  bill: {
     select: {
       id: true,
-      method: true,
-      amount: true,
-      tenderedAmount: true,
-      reference: true,
-      createdAt: true,
-      receivedBy: { select: { id: true, name: true } },
+      billNumber: true,
+      status: true,
+      totalPaise: true,
+      paidPaise: true,
+      invoice: { select: { id: true, invoiceNumber: true } },
+      payments: {
+        orderBy: { paidAt: "asc" },
+        select: {
+          id: true,
+          method: true,
+          amountPaise: true,
+          tenderedPaise: true,
+          reference: true,
+          paidAt: true,
+          receivedBy: { select: { id: true, name: true } },
+        },
+      },
     },
   },
 } as const;
@@ -1099,7 +1042,7 @@ async function getOrderDetail(client: TransactionClient, orderId: string) {
   const {
     items,
     kots,
-    payments,
+    bill: orderBill,
     subtotal,
     discountAmount,
     taxAmount,
@@ -1137,15 +1080,27 @@ async function getOrderDetail(client: TransactionClient, orderId: string) {
       }),
     ),
     kots: kots.map(({ _count, ...kot }) => ({ ...kot, itemCount: _count.items })),
-    payments: payments.map((payment) => ({
-      ...payment,
-      amount: payment.amount.toNumber(),
-      tenderedAmount: decimalToNumber(payment.tenderedAmount),
-      changeDue:
-        payment.tenderedAmount !== null
-          ? fromPaise(toPaise(payment.tenderedAmount) - toPaise(payment.amount))
-          : null,
-    })),
+    // Payments live on the order's bill (shared when tables combine orders).
+    payments: (orderBill?.payments ?? []).map(
+      ({ amountPaise, tenderedPaise, paidAt, ...payment }) => ({
+        ...payment,
+        amount: fromPaise(amountPaise),
+        tenderedAmount: tenderedPaise !== null ? fromPaise(tenderedPaise) : null,
+        changeDue: tenderedPaise !== null ? fromPaise(tenderedPaise - amountPaise) : null,
+        createdAt: paidAt,
+      }),
+    ),
+    billRef: orderBill
+      ? {
+          id: orderBill.id,
+          billNumber: orderBill.billNumber,
+          status: orderBill.status.toLowerCase(),
+          totalPaise: orderBill.totalPaise,
+          paidPaise: orderBill.paidPaise,
+          remainingPaise: Math.max(orderBill.totalPaise - orderBill.paidPaise, 0),
+          invoice: orderBill.invoice,
+        }
+      : null,
     bill: {
       subtotal: subtotal.toNumber(),
       discountAmount: discountAmount.toNumber(),
@@ -1306,7 +1261,7 @@ export async function createOrder(actor: OrderActor, input: CreateOrderInput) {
       : null;
 
     if (bill) {
-      await generateBill(tx, order.id, branch);
+      await generateBill(tx, actor, order.id, branch);
     }
 
     if (input.payments !== undefined) {
@@ -1767,7 +1722,7 @@ export async function billOrder(
       "This order is already billed or closed",
     );
 
-    await generateBill(tx, order.id, order.branch);
+    await generateBill(tx, actor, order.id, order.branch);
 
     if (input.payments !== undefined) {
       await applyPayments(tx, actor, order.id, input.payments);
@@ -1801,15 +1756,15 @@ export async function addOrderPayments(
 }
 
 /**
- * Cancels an open or billed order that has no payments, and cancels its
- * KOTs that the kitchen has not finished. Owners and managers only.
+ * Cancels an open order and its KOTs that the kitchen has not finished.
+ * A billed order must have its bill cancelled first, which reopens it.
+ * Owners and managers only.
  *
  * @param actor - The authenticated user.
  * @param orderId - The order ID.
  * @param input - The cancellation reason.
  * @returns The order's full view.
- * @throws OrderServiceError When not permitted, the order is closed, or
- * payments were already taken.
+ * @throws OrderServiceError When not permitted or the order is not open.
  */
 export async function cancelOrder(
   actor: OrderActor,
@@ -1822,8 +1777,10 @@ export async function cancelOrder(
     const order = await loadOrderForAction(tx, actor, orderId);
     assertOrderStatus(
       order,
-      [OrderStatus.OPEN, OrderStatus.BILLED],
-      "Only open or billed orders can be cancelled",
+      [OrderStatus.OPEN],
+      order.status === OrderStatus.BILLED
+        ? "This order is on a bill. Cancel the bill first, then the order."
+        : "Only open orders can be cancelled",
     );
 
     if (toPaise(order.amountPaid) > 0) {

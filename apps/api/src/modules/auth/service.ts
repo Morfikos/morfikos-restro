@@ -16,6 +16,7 @@ import type {
   ChangePasswordInput,
   LoginInput,
   ResetPasswordInput,
+  SetManagerPinInput,
   SignupInput,
   StaffSignupInput,
 } from "@morfikos/validation";
@@ -698,6 +699,68 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+  }
+
+  /**
+   * Sets the signed-in owner's or manager's approval PIN for their current
+   * organization. The PIN approves large discounts and credit notes, and is
+   * stored hashed. The account password confirms the change.
+   *
+   * @param actor - The authenticated user.
+   * @param input - The new PIN and the account password.
+   * @throws AuthServiceError If the role can't set a PIN, the password is
+   * wrong or the user has no organization.
+   */
+  async setManagerPin(actor: AuthContext, input: SetManagerPinInput) {
+    if (actor.role !== ROLES.OWNER && actor.role !== ROLES.MANAGER) {
+      throw new AuthServiceError(
+        AuthErrorCode.FORBIDDEN,
+        AUTH_MESSAGES.PIN_NOT_ALLOWED,
+        HTTP_STATUS.FORBIDDEN,
+      );
+    }
+
+    if (!actor.organizationId) {
+      throw new AuthServiceError(
+        AuthErrorCode.ORGANIZATION_ACCESS_DENIED,
+        AUTH_MESSAGES.NO_ORGANIZATION_MEMBERSHIP,
+        HTTP_STATUS.FORBIDDEN,
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { passwordHash: true, status: true },
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new AuthServiceError(
+        AuthErrorCode.UNAUTHENTICATED,
+        AUTH_MESSAGES.USER_INACTIVE,
+        HTTP_STATUS.UNAUTHORIZED,
+      );
+    }
+
+    if (!(await verifyPassword(input.password, user.passwordHash))) {
+      throw new AuthServiceError(
+        AuthErrorCode.INCORRECT_PASSWORD,
+        AUTH_MESSAGES.INCORRECT_PASSWORD,
+        HTTP_STATUS.BAD_REQUEST,
+      );
+    }
+
+    const updated = await prisma.membership.updateMany({
+      where: { userId: actor.userId, organizationId: actor.organizationId },
+      data: { pinHash: await hashPassword(input.pin) },
+    });
+
+    if (updated.count === 0) {
+      throw new AuthServiceError(
+        AuthErrorCode.ORGANIZATION_ACCESS_DENIED,
+        AUTH_MESSAGES.NO_ORGANIZATION_MEMBERSHIP,
+        HTTP_STATUS.FORBIDDEN,
+      );
+    }
   }
 
   /**

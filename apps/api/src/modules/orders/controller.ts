@@ -33,6 +33,8 @@ import {
 
 import { ORDER_MESSAGES, ORDER_STAFF_ROLES } from "./constants.js";
 
+import { handleBillingServiceError } from "../billing/controller.js";
+
 import { sendError, sendSuccess } from "../../utils/response.js";
 
 import { ErrorCode } from "../../utils/error-codes.js";
@@ -180,9 +182,10 @@ function authorizeOrderRequest(
 }
 
 /**
- * Handles known order service errors.
+ * Handles known order service errors, and billing errors raised by the
+ * order actions that bill or take payment through the billing module.
  *
- * @param error - The error thrown by the order service.
+ * @param error - The error thrown by the order or billing service.
  * @param reply - The Fastify reply instance.
  * @returns An error response for known service errors, or null.
  */
@@ -190,6 +193,12 @@ function handleOrderServiceError(
   error: unknown,
   reply: FastifyReply,
 ) {
+  const billingHandled = handleBillingServiceError(error, reply);
+
+  if (billingHandled) {
+    return billingHandled;
+  }
+
   if (!isOrderServiceError(error)) {
     return null;
   }

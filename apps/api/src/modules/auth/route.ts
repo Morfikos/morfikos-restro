@@ -8,6 +8,7 @@ import {
   logoutController,
   refreshController,
   resetPasswordController,
+  setManagerPinController,
   signupController,
   staffSignupController,
 } from "./controller.js";
@@ -44,4 +45,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   /** POST /api/v1/auth/change-password: change the account password. */
   app.post("/change-password", { preHandler: authenticate }, changePasswordController);
+
+  /** POST /api/v1/auth/manager-pin: set the owner's/manager's approval PIN. */
+  app.post("/manager-pin", { preHandler: authenticate }, setManagerPinController);
 }
