@@ -8,3 +8,4 @@ export * from "./floors.js";
 export * from "./kitchen.js";
 export * from "./billing.js";
 export * from "./shifts.js";
+export * from "./guests.js";

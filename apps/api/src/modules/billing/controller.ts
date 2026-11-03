@@ -321,6 +321,9 @@ export function handleBillingServiceError(
     case "SHIFT_NOT_FOUND":
       return sendError(reply, 404, error.message, ErrorCode.SHIFT_NOT_FOUND);
 
+    case "GUEST_NOT_FOUND":
+      return sendError(reply, 404, error.message, ErrorCode.GUEST_NOT_FOUND);
+
     default:
       return null;
   }

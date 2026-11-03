@@ -45,8 +45,8 @@ export const invoiceParamsSchema = z.object({
 export const createBillSchema = z.object({
   /** Optional; when omitted it is taken from the orders if they share a table. */
   tableId: z.uuid().optional(),
-  /** Stored for the guest/CRM module (not validated yet). */
-  guestId: referenceIdSchema.optional(),
+  /** The guest the bill belongs to; they earn loyalty points when it is settled. */
+  guestId: z.uuid().optional(),
   /** An open shift of the branch; when omitted, the cashier's open shift is used. */
   shiftId: z.uuid().optional(),
   orderIds: z
