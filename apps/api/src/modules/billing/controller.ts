@@ -318,6 +318,9 @@ export function handleBillingServiceError(
     case "DISCOUNT_BELOW_PAID":
       return sendError(reply, 409, error.message, ErrorCode.DISCOUNT_BELOW_PAID);
 
+    case "SHIFT_NOT_FOUND":
+      return sendError(reply, 404, error.message, ErrorCode.SHIFT_NOT_FOUND);
+
     default:
       return null;
   }
