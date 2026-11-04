@@ -167,6 +167,29 @@ export enum GuestServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for inventory, recipe and stock operations.
+ */
+export enum InventoryServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
+  INVENTORY_ITEM_NOT_FOUND = "INVENTORY_ITEM_NOT_FOUND",
+  INVENTORY_ITEM_EXISTS = "INVENTORY_ITEM_EXISTS",
+  SUPPLIER_NOT_FOUND = "SUPPLIER_NOT_FOUND",
+  SUPPLIER_EXISTS = "SUPPLIER_EXISTS",
+  PURCHASE_NOT_FOUND = "PURCHASE_NOT_FOUND",
+  STOCK_COUNT_NOT_FOUND = "STOCK_COUNT_NOT_FOUND",
+  MENU_ITEM_NOT_FOUND = "MENU_ITEM_NOT_FOUND",
+  RECIPE_NOT_FOUND = "RECIPE_NOT_FOUND",
+  INVALID_RECIPE = "INVALID_RECIPE",
+  INCOMPATIBLE_UNIT = "INCOMPATIBLE_UNIT",
+  INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK",
+  ITEM_IN_RECIPES = "ITEM_IN_RECIPES",
+  ALERT_NOT_FOUND = "ALERT_NOT_FOUND",
+  PIN_NOT_SET = "PIN_NOT_SET",
+  INVALID_MANAGER_PIN = "INVALID_MANAGER_PIN",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.
