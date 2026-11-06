@@ -189,6 +189,11 @@ model Membership {
   status             String                 @default("active")
   discountCeilingPct Float?
   pinHash            String?
+  /// Staff contact number and the restaurant's own staff/employee code.
+  phone              String?
+  employeeCode       String?
+  deactivatedAt      DateTime?
+  deactivationReason String?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -196,6 +201,7 @@ model Membership {
   branchRoles        MembershipBranchRole[]
 
   @@unique([organizationId, userId])
+  @@unique([organizationId, employeeCode])
   @@index([userId])
   @@index([organizationId, status])
 }

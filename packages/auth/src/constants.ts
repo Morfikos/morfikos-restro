@@ -190,6 +190,23 @@ export enum InventoryServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for staff (user) management operations.
+ */
+export enum UserServiceErrorCode {
+  USER_NOT_FOUND = "USER_NOT_FOUND",
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
+  ROLE_NOT_ASSIGNABLE = "ROLE_NOT_ASSIGNABLE",
+  ROLE_NOT_CONFIGURED = "ROLE_NOT_CONFIGURED",
+  CANNOT_MANAGE_USER = "CANNOT_MANAGE_USER",
+  CANNOT_MANAGE_SELF = "CANNOT_MANAGE_SELF",
+  EMAIL_ALREADY_EXISTS = "EMAIL_ALREADY_EXISTS",
+  EMPLOYEE_CODE_EXISTS = "EMPLOYEE_CODE_EXISTS",
+  USER_ALREADY_ACTIVE = "USER_ALREADY_ACTIVE",
+  USER_ALREADY_INACTIVE = "USER_ALREADY_INACTIVE",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.
