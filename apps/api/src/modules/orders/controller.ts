@@ -190,7 +190,7 @@ function authorizeOrderRequest(
  * @param reply - The Fastify reply instance.
  * @returns An error response for known service errors, or null.
  */
-function handleOrderServiceError(
+export function handleOrderServiceError(
   error: unknown,
   reply: FastifyReply,
 ) {

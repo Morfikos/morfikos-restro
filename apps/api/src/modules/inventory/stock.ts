@@ -629,7 +629,7 @@ export async function refreshDishesInAllBranchesInTx(
  */
 export async function deductStockForKotInTx(
   tx: TransactionClient,
-  kot: { organizationId: string; branchId: string; kotId: string; userId: string },
+  kot: { organizationId: string; branchId: string; kotId: string; userId: string | null },
 ): Promise<void> {
   const settings = await getInventorySettingsInTx(tx, kot.branchId);
 

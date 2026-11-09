@@ -140,7 +140,7 @@ function formatRupees(paise: number): string {
  * @param work - The transactional work.
  * @returns The work's result.
  */
-async function runOrderTransaction<T>(
+export async function runOrderTransaction<T>(
   work: (tx: TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
@@ -698,14 +698,14 @@ async function recalculateOrderTotals(
  * KOT numbers restart every business day.
  *
  * @param tx - The transaction client.
- * @param actor - The authenticated user.
+ * @param actor - The organization and the user sending it (null for a QR menu order).
  * @param orderId - The order ID.
  * @param branch - The order's branch.
  * @returns The new KOT's ID, or null when no lines were pending.
  */
 async function sendPendingItemsToKitchen(
   tx: TransactionClient,
-  actor: OrderActor,
+  actor: { organizationId: string; userId: string | null },
   orderId: string,
   branch: BranchClock,
 ): Promise<string | null> {
@@ -1183,7 +1183,7 @@ async function getKotTicket(client: TransactionClient, kotId: string) {
     businessDate: kot.businessDate,
     status: kot.status,
     createdAt: kot.createdAt,
-    createdBy: kot.createdBy.name,
+    createdBy: kot.createdBy?.name ?? "QR menu",
     orderId: kot.order.id,
     orderNumber: kot.order.orderNumber,
     orderType: kot.order.orderType,
@@ -1855,4 +1855,129 @@ export async function cancelOrder(
   await publishTicketsCancelled(cancelledTicketIds);
 
   return getOrderDetail(prisma, orderId);
+}
+
+/**
+ * Adds a QR menu round to the table's open dine-in order (creating the
+ * order when the table has none) and sends it to the kitchen on a new KOT.
+ * Prices come from the branch menu, as for POS orders. Called by the QR
+ * ordering module inside its own transaction (see {@link runOrderTransaction}).
+ *
+ * @param tx - The transaction client.
+ * @param placement - The table, items, guest details and the staff member who accepted it (null when auto-accepted).
+ * @returns The order, the new KOT and whether the order was created.
+ * @throws OrderServiceError When the branch is closed, the table's bill is already printed, or an item is unavailable.
+ */
+export async function placeQrOrderInTx(
+  tx: TransactionClient,
+  placement: {
+    organizationId: string;
+    branchId: string;
+    tableId: string;
+    items: MenuOrderLineInput[];
+    customerName: string | null;
+    customerPhone: string | null;
+    note: string | null;
+    allergyNote: string | null;
+    acceptedById: string | null;
+  },
+): Promise<{ orderId: string; kotId: string | null; created: boolean }> {
+  const branch = await tx.branch.findFirst({
+    where: { id: placement.branchId, organizationId: placement.organizationId, status: "active" },
+    select: branchClockSelect,
+  });
+
+  if (!branch) {
+    throw new OrderServiceError(
+      OrderServiceErrorCode.BRANCH_NOT_FOUND,
+      "This restaurant is not taking orders right now",
+    );
+  }
+
+  const existing = await tx.order.findFirst({
+    where: {
+      branchId: branch.id,
+      tableId: placement.tableId,
+      status: { in: ACTIVE_ORDER_STATUSES },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, allergyNote: true },
+  });
+
+  if (existing && existing.status !== OrderStatus.OPEN) {
+    throw new OrderServiceError(
+      OrderServiceErrorCode.ORDER_NOT_EDITABLE,
+      "The bill for this table has already been printed. Please ask the staff to add more items.",
+    );
+  }
+
+  let orderId: string;
+
+  if (existing) {
+    const lines = await resolveOrderLines(
+      tx,
+      placement.organizationId,
+      branch.id,
+      OrderType.DINE_IN,
+      placement.items,
+      await getExistingQuantities(tx, existing.id),
+    );
+
+    await insertOrderLines(tx, existing.id, lines);
+
+    if (placement.allergyNote) {
+      await tx.order.update({
+        where: { id: existing.id },
+        data: {
+          allergyNote: [existing.allergyNote, placement.allergyNote].filter(Boolean).join("; "),
+        },
+      });
+    }
+
+    await recalculateOrderTotals(tx, existing.id);
+    orderId = existing.id;
+  } else {
+    const lines = await resolveOrderLines(
+      tx,
+      placement.organizationId,
+      branch.id,
+      OrderType.DINE_IN,
+      placement.items,
+      new Map(),
+    );
+
+    const businessDate = getBusinessDate(branch.timezone, branch.businessDayCutoff);
+    const sequence = await nextBranchCounter(tx, branch.id, `order:${businessDate}`);
+
+    const order = await tx.order.create({
+      data: {
+        organizationId: placement.organizationId,
+        branchId: branch.id,
+        orderNumber: formatOrderNumber(branch.code, businessDate, sequence),
+        businessDate,
+        orderType: OrderType.DINE_IN,
+        source: "QR",
+        tableId: placement.tableId,
+        customerName: placement.customerName,
+        customerPhone: placement.customerPhone,
+        note: placement.note,
+        allergyNote: placement.allergyNote,
+        createdById: placement.acceptedById,
+      },
+      select: { id: true },
+    });
+
+    await insertOrderLines(tx, order.id, lines);
+    await recalculateOrderTotals(tx, order.id);
+    orderId = order.id;
+  }
+
+  const kotId = await sendPendingItemsToKitchen(
+    tx,
+    { organizationId: placement.organizationId, userId: placement.acceptedById },
+    orderId,
+    branch,
+  );
+
+  return { orderId, kotId, created: !existing };
 }
