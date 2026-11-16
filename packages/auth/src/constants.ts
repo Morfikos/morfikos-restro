@@ -227,6 +227,15 @@ export enum QrServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for report operations.
+ */
+export enum ReportServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
+  INVALID_RANGE = "INVALID_RANGE",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.
