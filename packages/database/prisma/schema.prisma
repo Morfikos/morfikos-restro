@@ -53,6 +53,7 @@ model User {
   serviceRequestsAcknowledged ServiceRequest[]     @relation("ServiceRequestAcknowledgedBy")
   serviceRequestsResolved     ServiceRequest[]     @relation("ServiceRequestResolvedBy")
   billsSplit                  Bill[]               @relation("BillSplitBy")
+  tableTransfers              TableTransfer[]      @relation("TableTransferCreatedBy")
 }
 
 model PasswordResetToken {
@@ -100,6 +101,7 @@ model Organization {
   stockMovements      StockMovement[]
   stockAlerts         StockAlert[]
   tableSessions       TableSession[]
+  tableTransfers      TableTransfer[]
 }
 
 model Branch {
@@ -151,6 +153,8 @@ model Branch {
 
   tableSessions TableSession[]
   qrSettings    QrSettings?
+
+  tableTransfers TableTransfer[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -586,6 +590,10 @@ model Order {
   items          OrderItem[]
   kots           Kot[]
   kitchenTickets KitchenTicket[]
+
+  /// Set when this order was merged into another one (it is then cancelled).
+  mergedIntoId String?
+  mergedAt     DateTime?
 
   @@unique([branchId, orderNumber])
   @@index([branchId, invoiceNumber])
@@ -1497,4 +1505,46 @@ model BillSplitPart {
   payments    BillPayment[]
 
   @@unique([billId, partNumber])
+}
+
+// ─── Table transfers ──────────────────────────────────────────────────────
+
+enum TableTransferType {
+  TRANSFER
+  SWAP
+  MERGE
+  ITEM_MOVE
+}
+
+/// A table move, swap, merge or item move. Its details are printed in the
+/// kitchen as a "Kitchen Shift slip" and kept as an audit trail.
+model TableTransfer {
+  id               String            @id @default(uuid())
+  organizationId   String
+  branchId         String
+  transferNumber   Int
+  businessDate     String
+  type             TableTransferType
+  fromOrderId      String
+  toOrderId        String
+  fromOrderNumber  String
+  toOrderNumber    String
+  fromTableId      String?
+  toTableId        String?
+  fromTableName    String?
+  toTableName      String?
+  /// Moved lines: [{ name, variantName, quantity, sentToKitchen, station }].
+  items            Json              @default("[]")
+  kitchenItemCount Int               @default(0)
+  reason           String?
+  createdById      String
+  createdAt        DateTime          @default(now())
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch           Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy        User              @relation("TableTransferCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([branchId, businessDate, transferNumber])
+  @@index([branchId, createdAt])
+  @@index([fromOrderId])
+  @@index([toOrderId])
 }

@@ -1005,7 +1005,8 @@ export async function getVoidReport(actor: ReportActor, branchId: string, query:
       },
     }),
     prisma.order.findMany({
-      where: { branchId: branch.id, status: "CANCELLED", businessDate: dateRange },
+      // Orders merged into another one aren't real cancellations.
+      where: { branchId: branch.id, status: "CANCELLED", businessDate: dateRange, mergedIntoId: null },
       orderBy: { cancelledAt: "desc" },
       select: {
         id: true,
@@ -1167,7 +1168,7 @@ export async function getStaffReport(actor: ReportActor, branchId: string, query
     }),
     prisma.order.groupBy({
       by: ["cancelledById"],
-      where: { branchId: branch.id, status: "CANCELLED", businessDate: dateRange, cancelledById: { not: null } },
+      where: { branchId: branch.id, status: "CANCELLED", businessDate: dateRange, cancelledById: { not: null }, mergedIntoId: null },
       _count: { _all: true },
     }),
   ]);
