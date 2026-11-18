@@ -1,6 +1,7 @@
 import type { UserRole } from "@morfikos/auth";
 import type {
   BillPaymentMethodValue,
+  BillSplitModeValue,
   BillStatusValue,
   DiscountTypeValue,
   InvoiceStatusValue,
@@ -43,6 +44,24 @@ export enum PaymentMethod {
 }
 
 /** API payment method → stored payment method. */
+/**
+ * How a bill was split. Values match the Prisma `BillSplitMode` enum.
+ */
+export enum BillSplitMode {
+  EQUAL = "EQUAL",
+  CUSTOM_AMOUNT = "CUSTOM_AMOUNT",
+  PERCENTAGE = "PERCENTAGE",
+  ITEMS = "ITEMS",
+}
+
+/** API split mode → stored split mode. */
+export const SPLIT_MODE_FROM_API: Record<BillSplitModeValue, BillSplitMode> = {
+  equal: BillSplitMode.EQUAL,
+  custom_amount: BillSplitMode.CUSTOM_AMOUNT,
+  percentage: BillSplitMode.PERCENTAGE,
+  items: BillSplitMode.ITEMS,
+};
+
 export const PAYMENT_METHOD_FROM_API: Record<BillPaymentMethodValue, PaymentMethod> = {
   cash: PaymentMethod.CASH,
   upi: PaymentMethod.UPI,

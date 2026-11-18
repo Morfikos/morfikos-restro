@@ -52,6 +52,7 @@ model User {
   qrOrdersDecided             QrOrder[]            @relation("QrOrderDecidedBy")
   serviceRequestsAcknowledged ServiceRequest[]     @relation("ServiceRequestAcknowledgedBy")
   serviceRequestsResolved     ServiceRequest[]     @relation("ServiceRequestResolvedBy")
+  billsSplit                  Bill[]               @relation("BillSplitBy")
 }
 
 model PasswordResetToken {
@@ -745,6 +746,13 @@ model Bill {
   invoice              Invoice?
   loyaltyTransactions  LoyaltyTransaction[]
 
+  /// Set when the bill is split; payments then go to its parts.
+  splitMode  BillSplitMode?
+  splitAt    DateTime?
+  splitById  String?
+  splitBy    User?           @relation("BillSplitBy", fields: [splitById], references: [id])
+  splitParts BillSplitPart[]
+
   @@unique([branchId, businessDate, billNumber])
   @@index([branchId, status])
   @@index([branchId, businessDate])
@@ -769,10 +777,15 @@ model BillPayment {
   receivedBy     User          @relation("BillPaymentReceivedBy", fields: [receivedById], references: [id])
   shift          Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
 
+  /// The split part this payment is for, when the bill is split.
+  splitPartId String?
+  splitPart   BillSplitPart? @relation(fields: [splitPartId], references: [id], onDelete: SetNull)
+
   @@unique([billId, idempotencyKey])
   @@index([billId])
   @@index([branchId, paidAt])
   @@index([shiftId, method])
+  @@index([splitPartId])
 }
 
 enum ShiftStatus {
@@ -1453,4 +1466,35 @@ model QrSettings {
   serviceRequestsEnabled Boolean  @default(true)
   updatedAt              DateTime @updatedAt
   branch                 Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+// ─── Split bills ──────────────────────────────────────────────────────────
+
+enum BillSplitMode {
+  EQUAL
+  CUSTOM_AMOUNT
+  PERCENTAGE
+  ITEMS
+}
+
+/// One guest's share of a split bill, paid separately. The bill still gets
+/// one GST invoice, issued when every part is paid.
+model BillSplitPart {
+  id          String        @id @default(uuid())
+  billId      String
+  partNumber  Int
+  label       String?
+  amountPaise Int
+  /// This part's share of the bill's GST, for its printed slip.
+  taxPaise    Int           @default(0)
+  paidPaise   Int           @default(0)
+  /// Percentage mode: the share requested.
+  percent     Decimal?      @db.Decimal(5, 2)
+  /// Item mode: [{ orderItemId, name, quantity, amountPaise, taxPaise }].
+  items       Json          @default("[]")
+  createdAt   DateTime      @default(now())
+  bill        Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
+  payments    BillPayment[]
+
+  @@unique([billId, partNumber])
 }

@@ -13,3 +13,4 @@ export * from "./inventory.js";
 export * from "./users.js";
 export * from "./qr.js";
 export * from "./reports.js";
+export * from "./split-bills.js";

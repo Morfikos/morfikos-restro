@@ -93,7 +93,7 @@ interface DiscountRequest {
  * @param paise - The amount in paise.
  * @returns The amount, e.g. "₹125.50".
  */
-function formatRupees(paise: number): string {
+export function formatRupees(paise: number): string {
   return `₹${fromPaise(paise).toFixed(2)}`;
 }
 
@@ -156,7 +156,7 @@ function formatCreditNoteNumber(
  * @param work - The transactional work.
  * @returns The work's result.
  */
-async function runBillingTransaction<T>(
+export async function runBillingTransaction<T>(
   work: (tx: TransactionClient) => Promise<T>,
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
@@ -488,13 +488,21 @@ async function applyDiscountInTx(
 ): Promise<void> {
   const bill = await tx.bill.findUniqueOrThrow({
     where: { id: billId },
-    select: { status: true, paidPaise: true },
+    select: { status: true, paidPaise: true, splitMode: true },
   });
 
   if (bill.status !== BillStatus.OPEN) {
     throw new BillingServiceError(
       BillingServiceErrorCode.BILL_NOT_OPEN,
       "Discounts can only be applied to open bills",
+    );
+  }
+
+  // The split's amounts were worked out from the current total.
+  if (bill.splitMode) {
+    throw new BillingServiceError(
+      BillingServiceErrorCode.BILL_IS_SPLIT,
+      "This bill is split. Remove the split before changing the discount.",
     );
   }
 
@@ -845,6 +853,7 @@ export async function createBillInTx(
  * @param actor - The user receiving the payment.
  * @param billId - The bill ID.
  * @param payments - The payments, in paise.
+ * @param splitPartId - The split part being paid; required when the bill is split.
  * @returns Each payment's ID and whether it was a replay.
  * @throws BillingServiceError If the bill is not open or the payments exceed the balance.
  */
@@ -853,6 +862,7 @@ export async function recordPaymentsInTx(
   actor: BillingActor,
   billId: string,
   payments: BillPaymentEntry[],
+  splitPartId?: string,
 ): Promise<Array<{ id: string; replayed: boolean }>> {
   const results: Array<{ id: string; replayed: boolean } | null> = [];
   const newPayments: BillPaymentEntry[] = [];
@@ -882,7 +892,7 @@ export async function recordPaymentsInTx(
 
   const bill = await tx.bill.findUniqueOrThrow({
     where: { id: billId },
-    select: { status: true, branchId: true, totalPaise: true, paidPaise: true },
+    select: { status: true, branchId: true, totalPaise: true, paidPaise: true, splitMode: true },
   });
 
   if (bill.status !== BillStatus.OPEN) {
@@ -902,6 +912,42 @@ export async function recordPaymentsInTx(
       BillingServiceErrorCode.PAYMENT_EXCEEDS_BALANCE,
       `Payment of ${formatRupees(incomingPaise)} exceeds the balance due of ${formatRupees(remainingPaise)}`,
     );
+  }
+
+  // A split bill is paid part by part, so each guest's share is tracked.
+  if (bill.splitMode && !splitPartId) {
+    throw new BillingServiceError(
+      BillingServiceErrorCode.SPLIT_PART_REQUIRED,
+      "This bill is split. Take the payment against one of its parts.",
+    );
+  }
+
+  if (splitPartId) {
+    const part = await tx.billSplitPart.findFirst({
+      where: { id: splitPartId, billId },
+      select: { partNumber: true, label: true, amountPaise: true, paidPaise: true },
+    });
+
+    if (!part) {
+      throw new BillingServiceError(
+        BillingServiceErrorCode.SPLIT_PART_NOT_FOUND,
+        "Split part not found on this bill",
+      );
+    }
+
+    const partDuePaise = part.amountPaise - part.paidPaise;
+
+    if (incomingPaise > partDuePaise) {
+      throw new BillingServiceError(
+        BillingServiceErrorCode.PAYMENT_EXCEEDS_BALANCE,
+        `Payment of ${formatRupees(incomingPaise)} exceeds ${part.label ?? `part ${part.partNumber}`}'s due of ${formatRupees(partDuePaise)}`,
+      );
+    }
+
+    await tx.billSplitPart.update({
+      where: { id: splitPartId },
+      data: { paidPaise: { increment: incomingPaise } },
+    });
   }
 
   // Money lands in the receiving cashier's open drawer, when there is one.
@@ -927,6 +973,7 @@ export async function recordPaymentsInTx(
         idempotencyKey: payment.idempotencyKey ?? null,
         receivedById: actor.userId,
         shiftId,
+        splitPartId: splitPartId ?? null,
       },
       select: { id: true },
     });
@@ -1015,6 +1062,7 @@ const billSelect = {
   discountReasonCode: true,
   offerId: true,
   couponCode: true,
+  splitMode: true,
   settledAt: true,
   cancelledAt: true,
   cancelReason: true,
@@ -1050,7 +1098,7 @@ const billSelect = {
  * @param billId - The bill ID.
  * @returns The bill as returned by the API.
  */
-async function getBillView(client: TransactionClient, billId: string) {
+export async function getBillView(client: TransactionClient, billId: string) {
   const bill = await client.bill.findUniqueOrThrow({
     where: { id: billId },
     select: billSelect,
@@ -1070,6 +1118,7 @@ async function getBillView(client: TransactionClient, billId: string) {
     discountAppliedBy,
     discountApprovedBy,
     status,
+    splitMode,
     ...billData
   } = bill;
 
@@ -1077,6 +1126,8 @@ async function getBillView(client: TransactionClient, billId: string) {
     ...billData,
     tableName: table?.name ?? null,
     status: status.toLowerCase(),
+    /** Set when the bill is split; see GET …/bills/:billId/split. */
+    splitMode: splitMode?.toLowerCase() ?? null,
     remainingPaise: Math.max(bill.totalPaise - bill.paidPaise, 0),
     orderIds: orders.map((order) => order.id),
     orders: orders.map((order) => ({
@@ -1115,7 +1166,7 @@ async function getBillView(client: TransactionClient, billId: string) {
  * @param billId - The bill ID.
  * @returns The bill ID, or null if not found.
  */
-async function findBill(organizationId: string, branchId: string, billId: string) {
+export async function findBill(organizationId: string, branchId: string, billId: string) {
   return prisma.bill.findFirst({
     where: { id: billId, branchId, organizationId },
     select: { id: true },
