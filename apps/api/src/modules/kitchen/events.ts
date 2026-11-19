@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import type { KitchenEventName } from "./constants.js";
 import type { InventoryEventName } from "../inventory/constants.js";
 import type { QrEventName } from "../qr/constants.js";
+import type { PaymentEventName } from "../payments/constants.js";
 
 /**
  * In-process publish/subscribe for live kitchen events, keyed by branch.
@@ -15,7 +16,7 @@ import type { QrEventName } from "../qr/constants.js";
 /** One event pushed to kitchen screens. */
 export interface KitchenEvent {
   /** Kitchen events, plus inventory (low stock, dishes 86'd) and QR table (orders, waiter calls) events. */
-  event: KitchenEventName | InventoryEventName | QrEventName;
+  event: KitchenEventName | InventoryEventName | QrEventName | PaymentEventName;
   data: unknown;
 }
 

@@ -292,7 +292,7 @@ async function closeSessionInTx(
  * @returns The open session.
  * @throws QrServiceError If the token is unknown or the session has ended.
  */
-async function getLiveSession(token: string): Promise<SessionRecord> {
+export async function getLiveSession(token: string): Promise<SessionRecord> {
   const session = await prisma.tableSession.findUnique({ where: { token }, select: sessionSelect });
 
   if (!session) {
