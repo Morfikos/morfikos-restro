@@ -15,3 +15,4 @@ export * from "./qr.js";
 export * from "./reports.js";
 export * from "./split-bills.js";
 export * from "./table-transfers.js";
+export * from "./payments.js";

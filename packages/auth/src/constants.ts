@@ -244,6 +244,26 @@ export enum ReportServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for UPI payment operations.
+ */
+export enum PaymentServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
+  BILL_NOT_FOUND = "BILL_NOT_FOUND",
+  BILL_NOT_OPEN = "BILL_NOT_OPEN",
+  BILL_NOT_READY = "BILL_NOT_READY",
+  UPI_NOT_CONFIGURED = "UPI_NOT_CONFIGURED",
+  GUEST_PAYMENTS_DISABLED = "GUEST_PAYMENTS_DISABLED",
+  SPLIT_PART_REQUIRED = "SPLIT_PART_REQUIRED",
+  SPLIT_PART_NOT_FOUND = "SPLIT_PART_NOT_FOUND",
+  NOTHING_DUE = "NOTHING_DUE",
+  AMOUNT_EXCEEDS_DUE = "AMOUNT_EXCEEDS_DUE",
+  PAYMENT_REQUEST_NOT_FOUND = "PAYMENT_REQUEST_NOT_FOUND",
+  PAYMENT_REQUEST_CLOSED = "PAYMENT_REQUEST_CLOSED",
+  DUPLICATE_UTR = "DUPLICATE_UTR",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.

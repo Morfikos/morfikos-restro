@@ -197,7 +197,7 @@ function authorizeQrRequest(
  * @param reply - The Fastify reply instance.
  * @returns An error response for known service errors, or null.
  */
-function handleQrServiceError(
+export function handleQrServiceError(
   error: unknown,
   reply: FastifyReply,
 ) {

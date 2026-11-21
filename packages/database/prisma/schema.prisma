@@ -54,6 +54,8 @@ model User {
   serviceRequestsResolved     ServiceRequest[]     @relation("ServiceRequestResolvedBy")
   billsSplit                  Bill[]               @relation("BillSplitBy")
   tableTransfers              TableTransfer[]      @relation("TableTransferCreatedBy")
+  paymentRequestsConfirmed    PaymentRequest[]     @relation("PaymentRequestConfirmedBy")
+  paymentRequestsCreated      PaymentRequest[]     @relation("PaymentRequestCreatedBy")
 }
 
 model PasswordResetToken {
@@ -102,6 +104,7 @@ model Organization {
   stockAlerts         StockAlert[]
   tableSessions       TableSession[]
   tableTransfers      TableTransfer[]
+  paymentRequests     PaymentRequest[]
 }
 
 model Branch {
@@ -155,6 +158,9 @@ model Branch {
   qrSettings    QrSettings?
 
   tableTransfers TableTransfer[]
+
+  paymentSettings PaymentSettings?
+  paymentRequests PaymentRequest[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -760,6 +766,8 @@ model Bill {
   splitById  String?
   splitBy    User?           @relation("BillSplitBy", fields: [splitById], references: [id])
   splitParts BillSplitPart[]
+
+  paymentRequests PaymentRequest[]
 
   @@unique([branchId, businessDate, billNumber])
   @@index([branchId, status])
@@ -1547,4 +1555,75 @@ model TableTransfer {
   @@index([branchId, createdAt])
   @@index([fromOrderId])
   @@index([toOrderId])
+}
+
+// ─── UPI payments ─────────────────────────────────────────────────────────
+
+enum PaymentRequestStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentRequestSource {
+  STAFF
+  QR
+}
+
+/// A branch's UPI details: money goes straight to this account (no gateway).
+model PaymentSettings {
+  branchId             String   @id
+  upiEnabled           Boolean  @default(false)
+  /// UPI ID (VPA) that receives the money, e.g. cafe@okhdfcbank.
+  upiVpa               String?
+  /// Name shown in the guest's UPI app.
+  payeeName            String?
+  /// Merchant category code, only for merchant (business) UPI IDs.
+  merchantCode         String?
+  /// Guests can pay their bill from the table QR menu.
+  guestPaymentsEnabled Boolean  @default(true)
+  /// Minutes a UPI QR stays valid.
+  requestExpiryMinutes Int      @default(15)
+  updatedAt            DateTime @updatedAt
+  branch               Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+/// A dynamic UPI QR for a bill (or one split part), and its confirmation.
+model PaymentRequest {
+  id             String               @id @default(uuid())
+  organizationId String
+  branchId       String
+  billId         String
+  splitPartId    String?
+  sessionId      String?
+  /// Short code in the UPI note so staff can match the payment, e.g. "MB18-K7Q2".
+  reference      String               @unique
+  amountPaise    Int
+  upiUri         String
+  status         PaymentRequestStatus @default(PENDING)
+  source         PaymentRequestSource @default(STAFF)
+  /// UPI transaction reference (UTR/RRN) from the guest's app.
+  utr            String?
+  payerName      String?
+  submittedAt    DateTime?
+  expiresAt      DateTime
+  confirmedAt    DateTime?
+  confirmedById  String?
+  billPaymentId  String?              @unique
+  rejectReason   String?
+  createdById    String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  bill           Bill                 @relation(fields: [billId], references: [id], onDelete: Cascade)
+  confirmedBy    User?                @relation("PaymentRequestConfirmedBy", fields: [confirmedById], references: [id])
+  createdBy      User?                @relation("PaymentRequestCreatedBy", fields: [createdById], references: [id])
+
+  @@index([branchId, status])
+  @@index([billId, status])
+  @@index([utr])
 }

@@ -23,6 +23,7 @@ import { userRoutes } from "./modules/users/routes.js";
 import { roleRoutes } from "./modules/roles/routes.js";
 import { qrRoutes } from "./modules/qr/routes.js";
 import { reportRoutes } from "./modules/reports/routes.js";
+import { paymentRoutes } from "./modules/payments/routes.js";
 import {
   MAX_IMAGE_BYTES,
   UPLOADS_URL_PREFIX,
@@ -68,6 +69,7 @@ export function buildApp() {
   app.register(roleRoutes);
   app.register(qrRoutes);
   app.register(reportRoutes);
+  app.register(paymentRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });
