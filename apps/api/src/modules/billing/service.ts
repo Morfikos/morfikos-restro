@@ -205,6 +205,39 @@ const billingBranchSelect = {
 } as const;
 
 /**
+ * Finds the cash drawer shift money taken by a user should count towards:
+ * the user's own open shift at the branch, else the branch's only open
+ * shift. Returns null when there is none (or several to choose from).
+ *
+ * @param tx - The transaction client.
+ * @param branchId - The branch ID.
+ * @param userId - The user taking the payment or creating the bill.
+ * @returns The shift ID, or null.
+ */
+async function resolveOpenShiftId(
+  tx: TransactionClient,
+  branchId: string,
+  userId: string,
+): Promise<string | null> {
+  const ownShift = await tx.shift.findFirst({
+    where: { branchId, staffId: userId, status: "OPEN" },
+    select: { id: true },
+  });
+
+  if (ownShift) {
+    return ownShift.id;
+  }
+
+  const openShifts = await tx.shift.findMany({
+    where: { branchId, status: "OPEN" },
+    select: { id: true },
+    take: 2,
+  });
+
+  return openShifts.length === 1 ? (openShifts[0]?.id ?? null) : null;
+}
+
+/**
  * Loads an active branch of the organization.
  *
  * @param tx - The transaction client.
@@ -707,6 +740,26 @@ export async function createBillInTx(
     tableId = tableIds.size === 1 ? (onlyTableId ?? null) : null;
   }
 
+  let shiftId: string | null;
+
+  if (input.shiftId !== undefined) {
+    const shift = await tx.shift.findFirst({
+      where: { id: input.shiftId, branchId: branch.id, status: "OPEN" },
+      select: { id: true },
+    });
+
+    if (!shift) {
+      throw new BillingServiceError(
+        BillingServiceErrorCode.SHIFT_NOT_FOUND,
+        "Open shift not found in this branch",
+      );
+    }
+
+    shiftId = shift.id;
+  } else {
+    shiftId = await resolveOpenShiftId(tx, branch.id, actor.userId);
+  }
+
   const businessDate = getBusinessDate(branch.timezone, branch.businessDayCutoff);
   const billNumber = await nextBranchCounter(tx, branch.id, `bill:${businessDate}`);
 
@@ -718,7 +771,7 @@ export async function createBillInTx(
       businessDate,
       tableId,
       guestId: input.guestId ?? null,
-      shiftId: input.shiftId ?? null,
+      shiftId,
       createdById: actor.userId,
     },
     select: { id: true },
@@ -822,6 +875,8 @@ export async function recordPaymentsInTx(
     );
   }
 
+  // Money lands in the receiving cashier's open drawer, when there is one.
+  const shiftId = await resolveOpenShiftId(tx, bill.branchId, actor.userId);
   let next = 0;
 
   for (const [index, result] of results.entries()) {
@@ -842,6 +897,7 @@ export async function recordPaymentsInTx(
         reference: payment.reference ?? null,
         idempotencyKey: payment.idempotencyKey ?? null,
         receivedById: actor.userId,
+        shiftId,
       },
       select: { id: true },
     });

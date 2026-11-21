@@ -36,6 +36,12 @@ model User {
   discountsApplied    Bill[]        @relation("BillDiscountAppliedBy")
   discountsApproved   Bill[]        @relation("BillDiscountApprovedBy")
   creditNotesCreated  CreditNote[]  @relation("CreditNoteCreatedBy")
+  shiftsWorked        Shift[]        @relation("ShiftStaff")
+  shiftsOpened        Shift[]        @relation("ShiftOpenedBy")
+  shiftsClosed        Shift[]        @relation("ShiftClosedBy")
+  cashMovements       CashMovement[] @relation("CashMovementCreatedBy")
+  expensesCreated     Expense[]      @relation("ExpenseCreatedBy")
+  expensesVoided      Expense[]      @relation("ExpenseVoidedBy")
 }
 
 model PasswordResetToken {
@@ -71,6 +77,8 @@ model Organization {
   bills          Bill[]
   invoices       Invoice[]
   creditNotes    CreditNote[]
+  shifts         Shift[]
+  expenses       Expense[]
   }
 
 model Branch {
@@ -109,6 +117,9 @@ model Branch {
   billPayments     BillPayment[]
   invoices         Invoice[]
   creditNotes      CreditNote[]
+  shifts           Shift[]
+  cashMovements    CashMovement[]
+  expenses         Expense[]
   @@index([organizationId])
   @@index([organizationId, status])
 }
@@ -661,12 +672,14 @@ model Bill {
   cancelledBy          User?         @relation("BillCancelledBy", fields: [cancelledById], references: [id])
   discountAppliedBy    User?         @relation("BillDiscountAppliedBy", fields: [discountAppliedById], references: [id])
   discountApprovedBy   User?         @relation("BillDiscountApprovedBy", fields: [discountApprovedById], references: [id])
+  shift                Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   orders               Order[]
   payments             BillPayment[]
   invoice              Invoice?
   @@unique([branchId, businessDate, billNumber])
   @@index([branchId, status])
   @@index([branchId, businessDate])
+  @@index([shiftId])
 }
 
 model BillPayment {
@@ -679,13 +692,121 @@ model BillPayment {
   reference      String?
   idempotencyKey String?
   receivedById   String
+  shiftId        String?
   paidAt         DateTime      @default(now())
   bill           Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
   branch         Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   receivedBy     User          @relation("BillPaymentReceivedBy", fields: [receivedById], references: [id])
+  shift          Shift?        @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   @@unique([billId, idempotencyKey])
   @@index([billId])
   @@index([branchId, paidAt])
+  @@index([shiftId, method])
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  PAY_IN
+  PAY_OUT
+}
+
+enum ExpenseCategory {
+  SUPPLIES
+  FOOD_STOCK
+  UTILITIES
+  MAINTENANCE
+  STAFF_WELFARE
+  TRANSPORT
+  MARKETING
+  RENT
+  OTHER
+}
+
+enum ExpensePaymentMode {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+}
+
+model Shift {
+  id                String         @id @default(uuid())
+  organizationId    String
+  branchId          String
+  shiftNumber       Int
+  businessDate      String
+  status            ShiftStatus    @default(OPEN)
+  staffId           String
+  openedById        String
+  openedAt          DateTime       @default(now())
+  openingCashPaise  Int
+  openingNote       String?
+  closedById        String?
+  closedAt          DateTime?
+  countedCashPaise  Int?
+  expectedCashPaise Int?
+  variancePaise     Int?
+  denominations     Json?
+  closingNote       String?
+  summary           Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch            Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  staff             User           @relation("ShiftStaff", fields: [staffId], references: [id])
+  openedBy          User           @relation("ShiftOpenedBy", fields: [openedById], references: [id])
+  closedBy          User?          @relation("ShiftClosedBy", fields: [closedById], references: [id])
+  bills             Bill[]
+  payments          BillPayment[]
+  cashMovements     CashMovement[]
+  expenses          Expense[]
+  @@unique([branchId, businessDate, shiftNumber])
+  @@index([branchId, status])
+  @@index([staffId, status])
+}
+
+model CashMovement {
+  id          String           @id @default(uuid())
+  shiftId     String
+  branchId    String
+  type        CashMovementType
+  amountPaise Int
+  reason      String
+  createdById String
+  createdAt   DateTime         @default(now())
+  shift       Shift            @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  branch      Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("CashMovementCreatedBy", fields: [createdById], references: [id])
+  @@index([shiftId])
+}
+
+model Expense {
+  id             String             @id @default(uuid())
+  organizationId String
+  branchId       String
+  shiftId        String?
+  businessDate   String
+  category       ExpenseCategory
+  amountPaise    Int
+  description    String
+  paymentMode    ExpensePaymentMode @default(CASH)
+  receiptUrl     String?
+  createdById    String
+  createdAt      DateTime           @default(now())
+  voidedAt       DateTime?
+  voidedById     String?
+  voidReason     String?
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  shift          Shift?             @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  createdBy      User               @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  voidedBy       User?              @relation("ExpenseVoidedBy", fields: [voidedById], references: [id])
+  @@index([branchId, businessDate])
+  @@index([shiftId])
 }
 
 model Invoice {

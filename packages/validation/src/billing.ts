@@ -47,8 +47,8 @@ export const createBillSchema = z.object({
   tableId: z.uuid().optional(),
   /** Stored for the guest/CRM module (not validated yet). */
   guestId: referenceIdSchema.optional(),
-  /** Stored for the cashier shift module (not validated yet). */
-  shiftId: referenceIdSchema.optional(),
+  /** An open shift of the branch; when omitted, the cashier's open shift is used. */
+  shiftId: z.uuid().optional(),
   orderIds: z
     .array(z.uuid())
     .min(1, "Select at least one order")
