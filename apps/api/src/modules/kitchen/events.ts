@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 
 import type { KitchenEventName } from "./constants.js";
+import type { InventoryEventName } from "../inventory/constants.js";
 
 /**
  * In-process publish/subscribe for live kitchen events, keyed by branch.
@@ -12,7 +13,8 @@ import type { KitchenEventName } from "./constants.js";
 
 /** One event pushed to kitchen screens. */
 export interface KitchenEvent {
-  event: KitchenEventName;
+  /** Kitchen events, plus inventory events (low stock, dishes 86'd) for the branch. */
+  event: KitchenEventName | InventoryEventName;
   data: unknown;
 }
 

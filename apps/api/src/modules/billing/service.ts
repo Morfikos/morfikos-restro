@@ -15,6 +15,7 @@ import { getBusinessDate, getFinancialYear } from "../../utils/branch-time.js";
 import { isPrismaUniqueConstraintError } from "../../utils/prisma-errors.js";
 import { OrderItemStatus, OrderStatus, PaymentStatus } from "../orders/constants.js";
 import { calculateOrderTotals, fromPaise, toPaise } from "../orders/pricing.js";
+import { recordGuestVisitInTx, reverseGuestLoyaltyInTx } from "../guests/loyalty.js";
 import {
   BILLING_MANAGER_ROLES,
   BILLING_TRANSACTION_OPTIONS,
@@ -561,6 +562,8 @@ async function settleBillInTx(tx: TransactionClient, billId: string): Promise<st
     select: {
       id: true,
       organizationId: true,
+      billNumber: true,
+      guestId: true,
       status: true,
       paidPaise: true,
       branch: { select: billingBranchSelect },
@@ -645,6 +648,18 @@ async function settleBillInTx(tx: TransactionClient, billId: string): Promise<st
         invoiceNumber,
         financialYear,
       },
+    });
+  }
+
+  if (bill.guestId) {
+    await recordGuestVisitInTx(tx, {
+      guestId: bill.guestId,
+      organizationId: bill.organizationId,
+      branchId: branch.id,
+      billId: bill.id,
+      billNumber: bill.billNumber,
+      totalPaise: totals.totalPaise,
+      businessDate,
     });
   }
 
@@ -758,6 +773,20 @@ export async function createBillInTx(
     shiftId = shift.id;
   } else {
     shiftId = await resolveOpenShiftId(tx, branch.id, actor.userId);
+  }
+
+  if (input.guestId !== undefined) {
+    const guest = await tx.guest.findFirst({
+      where: { id: input.guestId, organizationId: actor.organizationId },
+      select: { id: true },
+    });
+
+    if (!guest) {
+      throw new BillingServiceError(
+        BillingServiceErrorCode.GUEST_NOT_FOUND,
+        "Guest not found",
+      );
+    }
   }
 
   const businessDate = getBusinessDate(branch.timezone, branch.businessDayCutoff);
@@ -1493,6 +1522,7 @@ export async function createCreditNote(
       where: { id: invoice.id },
       select: {
         organizationId: true,
+        billId: true,
         totalPaise: true,
         taxPaise: true,
         creditedPaise: true,
@@ -1515,12 +1545,14 @@ export async function createCreditNote(
     const sequence = await nextBranchCounter(tx, branch.id, `credit-note:${financialYear}`);
     const creditedPaise = current.creditedPaise + input.amountPaise;
 
+    const creditNoteNumber = formatCreditNoteNumber(branch.code, financialYear, sequence);
+
     const creditNote = await tx.creditNote.create({
       data: {
         organizationId: current.organizationId,
         branchId: branch.id,
         invoiceId: invoice.id,
-        creditNoteNumber: formatCreditNoteNumber(branch.code, financialYear, sequence),
+        creditNoteNumber,
         financialYear,
         businessDate,
         originalAmountPaise: current.totalPaise,
@@ -1544,6 +1576,16 @@ export async function createCreditNote(
             ? InvoiceStatus.CREDITED
             : InvoiceStatus.PARTIALLY_CREDITED,
       },
+    });
+
+    await reverseGuestLoyaltyInTx(tx, {
+      billId: current.billId,
+      creditNoteId: creditNote.id,
+      creditNoteNumber,
+      organizationId: current.organizationId,
+      branchId: branch.id,
+      creditAmountPaise: input.amountPaise,
+      invoiceTotalPaise: current.totalPaise,
     });
 
     return creditNote.id;

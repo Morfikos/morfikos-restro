@@ -34,6 +34,7 @@ import {
 import { ORDER_MESSAGES, ORDER_STAFF_ROLES } from "./constants.js";
 
 import { handleBillingServiceError } from "../billing/controller.js";
+import { handleInventoryServiceError } from "../inventory/controller.js";
 
 import { sendError, sendSuccess } from "../../utils/response.js";
 
@@ -197,6 +198,13 @@ function handleOrderServiceError(
 
   if (billingHandled) {
     return billingHandled;
+  }
+
+  // Sending a KOT deducts stock, which can fail when negative stock is off.
+  const inventoryHandled = handleInventoryServiceError(error, reply);
+
+  if (inventoryHandled) {
+    return inventoryHandled;
   }
 
   if (!isOrderServiceError(error)) {

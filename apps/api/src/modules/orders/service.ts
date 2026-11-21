@@ -39,6 +39,11 @@ import {
   PosAction,
 } from "./constants.js";
 import {
+  deductStockForKotInTx,
+  reverseStockForOrderItemsInTx,
+} from "../inventory/stock.js";
+import { withInventoryEvents } from "../inventory/events.js";
+import {
   cancelKitchenTicketIfEmpty,
   cancelOrderKitchenTickets,
   createKitchenTicketsForKot,
@@ -140,7 +145,8 @@ async function runOrderTransaction<T>(
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await prisma.$transaction(work, ORDER_TRANSACTION_OPTIONS);
+      // Inventory events (low stock, dishes 86'd) go out only after a commit.
+      return await withInventoryEvents(() => prisma.$transaction(work, ORDER_TRANSACTION_OPTIONS));
     } catch (error: unknown) {
       if (attempt < MAX_NUMBERING_RETRIES && isPrismaUniqueConstraintError(error)) {
         continue;
@@ -733,6 +739,14 @@ async function sendPendingItemsToKitchen(
   await tx.orderItem.updateMany({
     where: { id: { in: pendingItems.map((item) => item.id) } },
     data: { status: OrderItemStatus.SENT, kotId: kot.id },
+  });
+
+  // The kitchen starts cooking: take the recipe ingredients out of stock.
+  await deductStockForKotInTx(tx, {
+    organizationId: actor.organizationId,
+    branchId: branch.id,
+    kotId: kot.id,
+    userId: actor.userId,
   });
 
   // Split the KOT into one kitchen display ticket per station.
@@ -1645,6 +1659,15 @@ export async function removeOrderItem(
         },
       });
 
+      // Put its ingredients back in stock.
+      await reverseStockForOrderItemsInTx(tx, {
+        organizationId: actor.organizationId,
+        branchId: order.branch.id,
+        orderItemIds: [item.id],
+        userId: actor.userId,
+        note: `Item voided: ${input.reason}`,
+      });
+
       // The kitchen stops cooking it; an emptied ticket is cancelled.
       if (item.kitchenTicketId) {
         await cancelKitchenTicketIfEmpty(tx, item.kitchenTicketId);
@@ -1798,6 +1821,24 @@ export async function cancelOrder(
         cancelledById: actor.userId,
         cancelReason: input.reason,
       },
+    });
+
+    // Ingredients of dishes the kitchen hadn't finished go back into stock.
+    const unfinishedItems = await tx.orderItem.findMany({
+      where: {
+        orderId: order.id,
+        status: OrderItemStatus.SENT,
+        kot: { status: { in: [KotStatus.PENDING, KotStatus.PREPARING] } },
+      },
+      select: { id: true },
+    });
+
+    await reverseStockForOrderItemsInTx(tx, {
+      organizationId: actor.organizationId,
+      branchId: order.branch.id,
+      orderItemIds: unfinishedItems.map((item) => item.id),
+      userId: actor.userId,
+      note: `Order cancelled: ${input.reason}`,
     });
 
     await tx.kot.updateMany({

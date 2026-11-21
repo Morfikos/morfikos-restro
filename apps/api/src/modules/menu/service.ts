@@ -915,7 +915,8 @@ export async function upsertBranchMenuItem(
       price: data.price,
       ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
       ...(data.comparePrice !== undefined && { comparePrice: data.comparePrice }),
-      ...(data.isAvailable !== undefined && { isAvailable: data.isAvailable }),
+      // A manager's choice overrides auto-86 (it won't switch the dish back on).
+      ...(data.isAvailable !== undefined && { isAvailable: data.isAvailable, autoUnavailableAt: null }),
       ...(data.dineInAvailable !== undefined && {
         dineInAvailable: data.dineInAvailable,
       }),
