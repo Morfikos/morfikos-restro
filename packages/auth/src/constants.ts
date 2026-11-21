@@ -207,6 +207,26 @@ export enum UserServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for QR table ordering operations.
+ */
+export enum QrServiceErrorCode {
+  TABLE_NOT_FOUND = "TABLE_NOT_FOUND",
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
+  ORDERING_DISABLED = "ORDERING_DISABLED",
+  SERVICE_REQUESTS_DISABLED = "SERVICE_REQUESTS_DISABLED",
+  PHONE_REQUIRED = "PHONE_REQUIRED",
+  SESSION_NOT_FOUND = "SESSION_NOT_FOUND",
+  SESSION_CLOSED = "SESSION_CLOSED",
+  SESSION_HAS_UNPAID_BILL = "SESSION_HAS_UNPAID_BILL",
+  QR_ORDER_NOT_FOUND = "QR_ORDER_NOT_FOUND",
+  QR_ORDER_ALREADY_DECIDED = "QR_ORDER_ALREADY_DECIDED",
+  TOO_MANY_PENDING_ORDERS = "TOO_MANY_PENDING_ORDERS",
+  SERVICE_REQUEST_NOT_FOUND = "SERVICE_REQUEST_NOT_FOUND",
+  ITEM_UNAVAILABLE = "ITEM_UNAVAILABLE",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.

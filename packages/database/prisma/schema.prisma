@@ -16,38 +16,42 @@ enum UserRole {
 }
 
 model User {
-  id                      String               @id @default(uuid())
-  name                    String
-  email                   String               @unique
-  passwordHash            String
-  status                  String               @default("active")
-  lastLoginAt             DateTime?
-  refreshTokens           RefreshToken[]
-  role                    UserRole             @default(staff)
-  memberships             Membership[]
-  passwordResetTokens     PasswordResetToken[]
-  ordersCreated           Order[]              @relation("OrderCreatedBy")
-  ordersCancelled         Order[]              @relation("OrderCancelledBy")
-  orderItemsVoided        OrderItem[]          @relation("OrderItemVoidedBy")
-  kotsCreated             Kot[]                @relation("KotCreatedBy")
-  paymentsReceived        BillPayment[]        @relation("BillPaymentReceivedBy")
-  layoutImports           FloorLayoutImport[]  @relation("LayoutImportCreatedBy")
-  billsCreated            Bill[]               @relation("BillCreatedBy")
-  billsCancelled          Bill[]               @relation("BillCancelledBy")
-  discountsApplied        Bill[]               @relation("BillDiscountAppliedBy")
-  discountsApproved       Bill[]               @relation("BillDiscountApprovedBy")
-  creditNotesCreated      CreditNote[]         @relation("CreditNoteCreatedBy")
-  shiftsWorked            Shift[]              @relation("ShiftStaff")
-  shiftsOpened            Shift[]              @relation("ShiftOpenedBy")
-  shiftsClosed            Shift[]              @relation("ShiftClosedBy")
-  cashMovements           CashMovement[]       @relation("CashMovementCreatedBy")
-  expensesCreated         Expense[]            @relation("ExpenseCreatedBy")
-  expensesVoided          Expense[]            @relation("ExpenseVoidedBy")
-  loyaltyAdjustments      LoyaltyTransaction[] @relation("LoyaltyTransactionCreatedBy")
-  purchasesCreated        Purchase[]           @relation("PurchaseCreatedBy")
-  stockCountsCreated      StockCount[]         @relation("StockCountCreatedBy")
-  stockMovements          StockMovement[]      @relation("StockMovementCreatedBy")
-  stockAlertsAcknowledged StockAlert[]         @relation("StockAlertAcknowledgedBy")
+  id                          String               @id @default(uuid())
+  name                        String
+  email                       String               @unique
+  passwordHash                String
+  status                      String               @default("active")
+  lastLoginAt                 DateTime?
+  refreshTokens               RefreshToken[]
+  role                        UserRole             @default(staff)
+  memberships                 Membership[]
+  passwordResetTokens         PasswordResetToken[]
+  ordersCreated               Order[]              @relation("OrderCreatedBy")
+  ordersCancelled             Order[]              @relation("OrderCancelledBy")
+  orderItemsVoided            OrderItem[]          @relation("OrderItemVoidedBy")
+  kotsCreated                 Kot[]                @relation("KotCreatedBy")
+  paymentsReceived            BillPayment[]        @relation("BillPaymentReceivedBy")
+  layoutImports               FloorLayoutImport[]  @relation("LayoutImportCreatedBy")
+  billsCreated                Bill[]               @relation("BillCreatedBy")
+  billsCancelled              Bill[]               @relation("BillCancelledBy")
+  discountsApplied            Bill[]               @relation("BillDiscountAppliedBy")
+  discountsApproved           Bill[]               @relation("BillDiscountApprovedBy")
+  creditNotesCreated          CreditNote[]         @relation("CreditNoteCreatedBy")
+  shiftsWorked                Shift[]              @relation("ShiftStaff")
+  shiftsOpened                Shift[]              @relation("ShiftOpenedBy")
+  shiftsClosed                Shift[]              @relation("ShiftClosedBy")
+  cashMovements               CashMovement[]       @relation("CashMovementCreatedBy")
+  expensesCreated             Expense[]            @relation("ExpenseCreatedBy")
+  expensesVoided              Expense[]            @relation("ExpenseVoidedBy")
+  loyaltyAdjustments          LoyaltyTransaction[] @relation("LoyaltyTransactionCreatedBy")
+  purchasesCreated            Purchase[]           @relation("PurchaseCreatedBy")
+  stockCountsCreated          StockCount[]         @relation("StockCountCreatedBy")
+  stockMovements              StockMovement[]      @relation("StockMovementCreatedBy")
+  stockAlertsAcknowledged     StockAlert[]         @relation("StockAlertAcknowledgedBy")
+  tableSessionsClosed         TableSession[]       @relation("TableSessionClosedBy")
+  qrOrdersDecided             QrOrder[]            @relation("QrOrderDecidedBy")
+  serviceRequestsAcknowledged ServiceRequest[]     @relation("ServiceRequestAcknowledgedBy")
+  serviceRequestsResolved     ServiceRequest[]     @relation("ServiceRequestResolvedBy")
 }
 
 model PasswordResetToken {
@@ -94,6 +98,7 @@ model Organization {
   stockCounts         StockCount[]
   stockMovements      StockMovement[]
   stockAlerts         StockAlert[]
+  tableSessions       TableSession[]
 }
 
 model Branch {
@@ -142,6 +147,9 @@ model Branch {
   stockMovements        StockMovement[]
   stockAlerts           StockAlert[]
   inventorySettings     InventorySettings?
+
+  tableSessions TableSession[]
+  qrSettings    QrSettings?
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -422,6 +430,8 @@ model DiningTable {
   orders    Order[]
   bills     Bill[]
 
+  sessions TableSession[]
+
   @@unique([branchId, name])
   @@index([branchId])
   @@index([branchId, isActive])
@@ -558,7 +568,7 @@ model Order {
   invoiceNumber  String?
   financialYear  String?
   billId         String?
-  createdById    String
+  createdById    String?
   billedAt       DateTime?
   paidAt         DateTime?
   cancelledAt    DateTime?
@@ -569,7 +579,7 @@ model Order {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
   table          DiningTable?    @relation(fields: [tableId], references: [id], onDelete: SetNull)
-  createdBy      User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  createdBy      User?           @relation("OrderCreatedBy", fields: [createdById], references: [id])
   cancelledBy    User?           @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
   bill           Bill?           @relation(fields: [billId], references: [id], onDelete: SetNull)
   items          OrderItem[]
@@ -633,12 +643,12 @@ model Kot {
   roundNo      Int             @default(1)
   businessDate String
   status       KotStatus       @default(PENDING)
-  createdById  String
+  createdById  String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdBy    User            @relation("KotCreatedBy", fields: [createdById], references: [id])
+  createdBy    User?           @relation("KotCreatedBy", fields: [createdById], references: [id])
   items        OrderItem[]
   tickets      KitchenTicket[]
 
@@ -987,6 +997,8 @@ model Guest {
   loyalty         LoyaltyTransaction[]
   bills           Bill[]
 
+  tableSessions TableSession[]
+
   @@unique([organizationId, phone])
   @@index([organizationId, lastVisitAt])
   @@index([organizationId, totalVisits])
@@ -1313,4 +1325,132 @@ model InventorySettings {
   lowStockAlertsEnabled Boolean  @default(true)
   updatedAt             DateTime @updatedAt
   branch                Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+// ─── QR ordering ──────────────────────────────────────────────────────────
+
+enum TableSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum QrOrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ServiceRequestType {
+  CALL_WAITER
+  WATER
+  NAPKINS
+  CUTLERY
+  BILL
+  CLEANING
+  OTHER
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+/// A live dining session at a table. Every phone that scans the table's QR
+/// while it is open joins the same session and adds to the same order.
+model TableSession {
+  id              String             @id @default(uuid())
+  organizationId  String
+  branchId        String
+  tableId         String
+  /// Secret the guest's phone sends with every call.
+  token           String             @unique
+  status          TableSessionStatus @default(OPEN)
+  guestName       String?
+  guestPhone      String?
+  guestId         String?
+  /// The table's order that QR rounds are added to.
+  orderId         String?
+  deviceCount     Int                @default(1)
+  billRequestedAt DateTime?
+  openedAt        DateTime           @default(now())
+  lastActivityAt  DateTime           @default(now())
+  closedAt        DateTime?
+  closedById      String?
+  closeReason     String?
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch          Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table           DiningTable        @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  guest           Guest?             @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  closedBy        User?              @relation("TableSessionClosedBy", fields: [closedById], references: [id])
+  qrOrders        QrOrder[]
+  requests        ServiceRequest[]
+
+  @@index([tableId, status])
+  @@index([branchId, status])
+  @@index([orderId])
+}
+
+/// One round of items a guest sent from the QR menu.
+model QrOrder {
+  id             String        @id @default(uuid())
+  organizationId String
+  branchId       String
+  sessionId      String
+  tableId        String
+  roundNumber    Int
+  status         QrOrderStatus @default(PENDING)
+  /// The submitted lines: menuItemId, variantId, addonIds, quantity, note.
+  items          Json
+  itemCount      Int
+  /// Pre-tax estimate shown to staff before accepting, in rupees.
+  estimatedTotal Decimal       @db.Decimal(12, 2)
+  note           String?
+  allergyNote    String?
+  orderId        String?
+  kotId          String?
+  rejectReason   String?
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  session        TableSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  decidedBy      User?         @relation("QrOrderDecidedBy", fields: [decidedById], references: [id])
+
+  @@unique([sessionId, roundNumber])
+  @@index([branchId, status])
+}
+
+/// A guest's request from the table: call waiter, water, bill…
+model ServiceRequest {
+  id               String               @id @default(uuid())
+  organizationId   String
+  branchId         String
+  sessionId        String
+  tableId          String
+  type             ServiceRequestType
+  status           ServiceRequestStatus @default(OPEN)
+  note             String?
+  createdAt        DateTime             @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+  session          TableSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  acknowledgedBy   User?                @relation("ServiceRequestAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  resolvedBy       User?                @relation("ServiceRequestResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([branchId, status])
+  @@index([sessionId, type, status])
+}
+
+/// Per-branch QR ordering switches; a branch without a row uses the defaults.
+model QrSettings {
+  branchId               String   @id
+  orderingEnabled        Boolean  @default(true)
+  /// true: guest orders go straight to the kitchen (KOT). false: staff accept first.
+  autoAcceptOrders       Boolean  @default(true)
+  requireGuestPhone      Boolean  @default(false)
+  serviceRequestsEnabled Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+  branch                 Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 }

@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 
 import type { KitchenEventName } from "./constants.js";
 import type { InventoryEventName } from "../inventory/constants.js";
+import type { QrEventName } from "../qr/constants.js";
 
 /**
  * In-process publish/subscribe for live kitchen events, keyed by branch.
@@ -13,8 +14,8 @@ import type { InventoryEventName } from "../inventory/constants.js";
 
 /** One event pushed to kitchen screens. */
 export interface KitchenEvent {
-  /** Kitchen events, plus inventory events (low stock, dishes 86'd) for the branch. */
-  event: KitchenEventName | InventoryEventName;
+  /** Kitchen events, plus inventory (low stock, dishes 86'd) and QR table (orders, waiter calls) events. */
+  event: KitchenEventName | InventoryEventName | QrEventName;
   data: unknown;
 }
 
