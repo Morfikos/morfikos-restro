@@ -13,7 +13,21 @@ import {
   removeOrderItemSchema,
   updateOrderItemSchema,
   updateOrderSchema,
+  listTableTransfersQuerySchema,
+  mergeOrderSchema,
+  moveOrderItemsSchema,
+  tableTransferBranchParamsSchema,
+  tableTransferIdParamsSchema,
+  transferOrderSchema,
 } from "@morfikos/validation";
+
+import {
+  getTableTransfer,
+  listTableTransfers,
+  mergeOrder,
+  moveOrderItems,
+  transferOrder,
+} from "./table-actions.js";
 
 import {
   addOrderItems,
@@ -212,6 +226,12 @@ export function handleOrderServiceError(
   }
 
   switch (error.code) {
+    case "INVALID_TRANSFER":
+      return sendError(reply, 409, error.message, ErrorCode.INVALID_TRANSFER);
+
+    case "TRANSFER_NOT_FOUND":
+      return sendError(reply, 404, error.message, ErrorCode.TRANSFER_NOT_FOUND);
+
     case "BRANCH_NOT_FOUND":
       return sendError(reply, 404, error.message, ErrorCode.BRANCH_NOT_FOUND);
 
@@ -806,5 +826,232 @@ export async function cancelOrderController(
     }
 
     return sendUnexpectedError(request, reply, error, "Failed to cancel order");
+  }
+}
+
+// ─── Table actions (table transfer) ─────────────────────────────────────
+
+type TransferBranchRequest = FastifyRequest<{
+  Params: { branchId: string };
+}>;
+
+type TransferIdRequest = FastifyRequest<{
+  Params: { transferId: string };
+}>;
+
+/**
+ * Sends the response for a caught order error, or a 500.
+ *
+ * @param request - The incoming request.
+ * @param reply - The Fastify reply instance.
+ * @param error - The caught error.
+ * @param logMessage - The message to log for unexpected errors.
+ * @returns The error response.
+ */
+function sendOrderError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: unknown,
+  logMessage: string,
+) {
+  const handled = handleOrderServiceError(error, reply);
+
+  if (handled) {
+    return handled;
+  }
+
+  return sendUnexpectedError(request, reply, error, logMessage);
+}
+
+/**
+ * Moves an order to another table (or swaps two tables).
+ *
+ * @param request - The incoming request containing the order ID and table.
+ * @param reply - The Fastify reply instance.
+ * @returns The order(s) and the Kitchen Shift slip, or an error response.
+ */
+export async function transferOrderController(
+  request: OrderIdRequest,
+  reply: FastifyReply,
+) {
+  const actor = authorizeOrderRequest(request, reply);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedParams = orderIdParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const parsedBody = transferOrderSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const result = await transferOrder(actor, parsedParams.data.id, parsedBody.data);
+
+    return sendSuccess(
+      reply,
+      200,
+      result.swappedOrder ? "Tables swapped" : "Order moved to the new table",
+      result,
+    );
+  } catch (error: unknown) {
+    return sendOrderError(request, reply, error, "Failed to transfer order");
+  }
+}
+
+/**
+ * Merges an order into another order or table.
+ *
+ * @param request - The incoming request containing the order ID and target.
+ * @param reply - The Fastify reply instance.
+ * @returns The combined order and slip, or an error response.
+ */
+export async function mergeOrderController(
+  request: OrderIdRequest,
+  reply: FastifyReply,
+) {
+  const actor = authorizeOrderRequest(request, reply);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedParams = orderIdParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const parsedBody = mergeOrderSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const result = await mergeOrder(actor, parsedParams.data.id, parsedBody.data);
+
+    return sendSuccess(reply, 200, "Orders merged", result);
+  } catch (error: unknown) {
+    return sendOrderError(request, reply, error, "Failed to merge orders");
+  }
+}
+
+/**
+ * Moves some items to another order or table.
+ *
+ * @param request - The incoming request containing the order ID, items and target.
+ * @param reply - The Fastify reply instance.
+ * @returns Both orders and the slip, or an error response.
+ */
+export async function moveOrderItemsController(
+  request: OrderIdRequest,
+  reply: FastifyReply,
+) {
+  const actor = authorizeOrderRequest(request, reply);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedParams = orderIdParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const parsedBody = moveOrderItemsSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const result = await moveOrderItems(actor, parsedParams.data.id, parsedBody.data);
+
+    return sendSuccess(reply, 200, "Items moved", result);
+  } catch (error: unknown) {
+    return sendOrderError(request, reply, error, "Failed to move items");
+  }
+}
+
+/**
+ * Lists a branch's table actions (audit trail and slips).
+ *
+ * @param request - The incoming request containing the branch and filters.
+ * @param reply - The Fastify reply instance.
+ * @returns The transfers or an error response.
+ */
+export async function listTableTransfersController(
+  request: TransferBranchRequest,
+  reply: FastifyReply,
+) {
+  const actor = authorizeOrderRequest(request, reply);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedParams = tableTransferBranchParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const parsedQuery = listTableTransfersQuerySchema.safeParse(request.query);
+
+  if (!parsedQuery.success) {
+    return sendValidationError(reply, parsedQuery.error);
+  }
+
+  try {
+    const transfers = await listTableTransfers(actor, parsedParams.data.branchId, parsedQuery.data);
+
+    return sendSuccess(reply, 200, "Table transfers retrieved successfully", transfers);
+  } catch (error: unknown) {
+    return sendOrderError(request, reply, error, "Failed to list table transfers");
+  }
+}
+
+/**
+ * Retrieves one Kitchen Shift slip (to reprint it).
+ *
+ * @param request - The incoming request containing the transfer ID.
+ * @param reply - The Fastify reply instance.
+ * @returns The slip or an error response.
+ */
+export async function getTableTransferController(
+  request: TransferIdRequest,
+  reply: FastifyReply,
+) {
+  const actor = authorizeOrderRequest(request, reply);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedParams = tableTransferIdParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  try {
+    const transfer = await getTableTransfer(actor, parsedParams.data.transferId);
+
+    if (!transfer) {
+      return sendError(reply, 404, "Table transfer not found", ErrorCode.TRANSFER_NOT_FOUND);
+    }
+
+    return sendSuccess(reply, 200, "Kitchen Shift slip retrieved successfully", transfer);
+  } catch (error: unknown) {
+    return sendOrderError(request, reply, error, "Failed to get table transfer");
   }
 }

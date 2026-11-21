@@ -57,7 +57,7 @@ import type { PaymentMethod } from "../billing/constants.js";
 const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
-type TransactionClient = Omit<
+export type TransactionClient = Omit<
   typeof prisma,
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$extends"
 >;
@@ -237,7 +237,7 @@ function getNumberPrefix(code: string | null): string {
  * @param sequence - The order's sequence number for the day.
  * @returns The order number.
  */
-function formatOrderNumber(
+export function formatOrderNumber(
   code: string | null,
   businessDate: string,
   sequence: number,
@@ -255,7 +255,7 @@ function formatOrderNumber(
  * @param name - The counter name, e.g. "kot:2026-10-24".
  * @returns The new counter value.
  */
-async function nextBranchCounter(
+export async function nextBranchCounter(
   tx: TransactionClient,
   branchId: string,
   name: string,
@@ -617,7 +617,7 @@ async function insertOrderLines(
  * @returns The totals (in paise) and the number of billable lines.
  * @throws OrderServiceError When strict and the discount exceeds the subtotal.
  */
-async function recalculateOrderTotals(
+export async function recalculateOrderTotals(
   tx: TransactionClient,
   orderId: string,
   options: { strictDiscount?: boolean } = {},
@@ -849,7 +849,7 @@ async function applyPayments(
  * @returns The order's state and branch.
  * @throws OrderServiceError When not found or the branch is not accessible.
  */
-async function loadOrderForAction(
+export async function loadOrderForAction(
   tx: TransactionClient,
   actor: OrderActor,
   orderId: string,
@@ -887,7 +887,7 @@ async function loadOrderForAction(
  * @param message - The error message when not allowed.
  * @throws OrderServiceError When the status is not allowed.
  */
-function assertOrderStatus(
+export function assertOrderStatus(
   order: { status: string },
   allowed: OrderStatus[],
   message: string,
@@ -961,6 +961,9 @@ const orderDetailSelect = {
   paidAt: true,
   cancelledAt: true,
   cancelReason: true,
+  /** Set when this order was merged into another (see table transfers). */
+  mergedIntoId: true,
+  mergedAt: true,
   createdAt: true,
   updatedAt: true,
   branch: {
@@ -1047,7 +1050,7 @@ const orderDetailSelect = {
  * @param orderId - The order ID.
  * @returns The serialized order.
  */
-async function getOrderDetail(client: TransactionClient, orderId: string) {
+export async function getOrderDetail(client: TransactionClient, orderId: string) {
   const order = await client.order.findUniqueOrThrow({
     where: { id: orderId },
     select: orderDetailSelect,

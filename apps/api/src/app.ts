@@ -22,6 +22,7 @@ import { inventoryRoutes } from "./modules/inventory/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
 import { roleRoutes } from "./modules/roles/routes.js";
 import { qrRoutes } from "./modules/qr/routes.js";
+import { reportRoutes } from "./modules/reports/routes.js";
 import {
   MAX_IMAGE_BYTES,
   UPLOADS_URL_PREFIX,
@@ -66,6 +67,7 @@ export function buildApp() {
   app.register(userRoutes);
   app.register(roleRoutes);
   app.register(qrRoutes);
+  app.register(reportRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });

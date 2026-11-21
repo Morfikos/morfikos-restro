@@ -12,6 +12,11 @@ import {
   sendKotController,
   updateOrderController,
   updateOrderItemController,
+  transferOrderController,
+  mergeOrderController,
+  moveOrderItemsController,
+  listTableTransfersController,
+  getTableTransferController,
 } from "./controller.js";
 
 type OrderIdRoute = { Params: { id: string } };
@@ -23,6 +28,8 @@ type OrderItemRoute = { Params: { id: string; itemId: string } };
  *
  * @param app - Fastify application instance.
  */
+type OrderTransferRoute = { Params: { id: string } };
+
 export async function orderRoutes(app: FastifyInstance) {
   /**
    * Creates an order and applies a POS action (HOLD / KOT / BILL / KOT_BILL).
@@ -108,5 +115,45 @@ export async function orderRoutes(app: FastifyInstance) {
     "/api/v1/orders/:id/cancel",
     { preHandler: authenticate },
     cancelOrderController,
+  );
+
+  // ─── Table actions (table transfer) ───────────────────────────────────
+
+  /**
+   * Moves an order to another table; `swap: true` swaps two busy tables.
+   * POST /api/v1/orders/:id/transfer
+   */
+  app.post<OrderTransferRoute>("/api/v1/orders/:id/transfer", { preHandler: authenticate }, transferOrderController);
+
+  /**
+   * Merges this order into another order or table.
+   * POST /api/v1/orders/:id/merge
+   */
+  app.post<OrderTransferRoute>("/api/v1/orders/:id/merge", { preHandler: authenticate }, mergeOrderController);
+
+  /**
+   * Moves some items to another order or table.
+   * POST /api/v1/orders/:id/items/move
+   */
+  app.post<OrderTransferRoute>("/api/v1/orders/:id/items/move", { preHandler: authenticate }, moveOrderItemsController);
+
+  /**
+   * Lists table actions (audit trail, slips to reprint).
+   * GET /api/v1/branches/:branchId/table-transfers?date=&type=&orderId=&limit=&offset=
+   */
+  app.get<{ Params: { branchId: string } }>(
+    "/api/v1/branches/:branchId/table-transfers",
+    { preHandler: authenticate },
+    listTableTransfersController,
+  );
+
+  /**
+   * Retrieves one Kitchen Shift slip.
+   * GET /api/v1/table-transfers/:transferId
+   */
+  app.get<{ Params: { transferId: string } }>(
+    "/api/v1/table-transfers/:transferId",
+    { preHandler: authenticate },
+    getTableTransferController,
   );
 }

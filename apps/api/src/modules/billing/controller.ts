@@ -15,7 +15,18 @@ import {
   listInvoicesQuerySchema,
   recordBillPaymentSchema,
   settleBillSchema,
+  splitBillSchema,
+  splitPartParamsSchema,
 } from "@morfikos/validation";
+
+import {
+  getBillSplit,
+  getBillSplitPart,
+  payBillSplitPart,
+  previewBillSplit,
+  removeBillSplit,
+  splitBill,
+} from "./split.js";
 
 import {
   applyBillDiscount,
@@ -50,6 +61,10 @@ type BranchRequest = FastifyRequest<{
 
 type BillRequest = FastifyRequest<{
   Params: { branchId: string; billId: string };
+}>;
+
+type SplitPartRequest = FastifyRequest<{
+  Params: { branchId: string; billId: string; partNumber: string };
 }>;
 
 type InvoiceRequest = FastifyRequest<{
@@ -323,6 +338,24 @@ export function handleBillingServiceError(
 
     case "GUEST_NOT_FOUND":
       return sendError(reply, 404, error.message, ErrorCode.GUEST_NOT_FOUND);
+
+    case "INVALID_SPLIT":
+      return sendError(reply, 400, error.message, ErrorCode.INVALID_SPLIT);
+
+    case "SPLIT_PART_NOT_FOUND":
+      return sendError(reply, 404, error.message, ErrorCode.SPLIT_PART_NOT_FOUND);
+
+    case "BILL_NOT_SPLIT":
+      return sendError(reply, 409, error.message, ErrorCode.BILL_NOT_SPLIT);
+
+    case "BILL_IS_SPLIT":
+      return sendError(reply, 409, error.message, ErrorCode.BILL_IS_SPLIT);
+
+    case "SPLIT_HAS_PAYMENTS":
+      return sendError(reply, 409, error.message, ErrorCode.SPLIT_HAS_PAYMENTS);
+
+    case "SPLIT_PART_REQUIRED":
+      return sendError(reply, 409, error.message, ErrorCode.SPLIT_PART_REQUIRED);
 
     default:
       return null;
@@ -877,5 +910,287 @@ export async function getInvoiceController(
     }
 
     return sendUnexpectedError(request, reply, error, "Failed to get invoice");
+  }
+}
+
+// ─── Split bills ────────────────────────────────────────────────────────
+
+/**
+ * Sends the response for a caught billing error, or a 500.
+ *
+ * @param request - The incoming request.
+ * @param reply - The Fastify reply instance.
+ * @param error - The caught error.
+ * @param logMessage - The message to log for unexpected errors.
+ * @returns The error response.
+ */
+function sendBillingError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: unknown,
+  logMessage: string,
+) {
+  const handled = handleBillingServiceError(error, reply);
+
+  if (handled) {
+    return handled;
+  }
+
+  return sendUnexpectedError(request, reply, error, logMessage);
+}
+
+/**
+ * Previews a split (equal, custom amounts, percentages or items) without saving.
+ *
+ * @param request - The incoming request containing the bill and split.
+ * @param reply - The Fastify reply instance.
+ * @returns The computed parts or an error response.
+ */
+export async function previewBillSplitController(
+  request: BillRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = billParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedBody = splitBillSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const preview = await previewBillSplit(actor, parsedParams.data.branchId, parsedParams.data.billId, parsedBody.data);
+
+    if (!preview) {
+      return sendBillNotFound(reply);
+    }
+
+    return sendSuccess(reply, 200, "Split preview calculated", preview);
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to preview bill split");
+  }
+}
+
+/**
+ * Splits a bill, or replaces its split while no part is paid.
+ *
+ * @param request - The incoming request containing the bill and split.
+ * @param reply - The Fastify reply instance.
+ * @returns The split or an error response.
+ */
+export async function splitBillController(
+  request: BillRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = billParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedBody = splitBillSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const split = await splitBill(actor, parsedParams.data.branchId, parsedParams.data.billId, parsedBody.data);
+
+    if (!split) {
+      return sendBillNotFound(reply);
+    }
+
+    return sendSuccess(reply, 201, "Bill split successfully", split);
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to split bill");
+  }
+}
+
+/**
+ * Retrieves a bill's split with each part's status and payments.
+ *
+ * @param request - The incoming request containing the bill.
+ * @param reply - The Fastify reply instance.
+ * @returns The split or an error response.
+ */
+export async function getBillSplitController(
+  request: BillRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = billParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  try {
+    const split = await getBillSplit(actor, parsedParams.data.branchId, parsedParams.data.billId);
+
+    if (!split) {
+      return sendBillNotFound(reply);
+    }
+
+    return sendSuccess(reply, 200, "Bill split retrieved successfully", split);
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to get bill split");
+  }
+}
+
+/**
+ * Removes a bill's split (no part may be paid).
+ *
+ * @param request - The incoming request containing the bill.
+ * @param reply - The Fastify reply instance.
+ * @returns The bill or an error response.
+ */
+export async function removeBillSplitController(
+  request: BillRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = billParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  try {
+    const bill = await removeBillSplit(actor, parsedParams.data.branchId, parsedParams.data.billId);
+
+    if (!bill) {
+      return sendBillNotFound(reply);
+    }
+
+    return sendSuccess(reply, 200, "Bill split removed", bill);
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to remove bill split");
+  }
+}
+
+/**
+ * Retrieves one part of a split bill as a slip to print for that guest.
+ *
+ * @param request - The incoming request containing the bill and part number.
+ * @param reply - The Fastify reply instance.
+ * @returns The part slip or an error response.
+ */
+export async function getBillSplitPartController(
+  request: SplitPartRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = splitPartParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  try {
+    const part = await getBillSplitPart(
+      actor,
+      parsedParams.data.branchId,
+      parsedParams.data.billId,
+      parsedParams.data.partNumber,
+    );
+
+    if (!part) {
+      return sendBillNotFound(reply);
+    }
+
+    return sendSuccess(reply, 200, "Split part retrieved successfully", part);
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to get split part");
+  }
+}
+
+/**
+ * Takes a payment for one part of a split bill.
+ *
+ * @param request - The incoming request containing the bill, part number and payment.
+ * @param reply - The Fastify reply instance.
+ * @returns The payment and statuses or an error response.
+ */
+export async function payBillSplitPartController(
+  request: SplitPartRequest,
+  reply: FastifyReply,
+) {
+  const parsedParams = splitPartParamsSchema.safeParse(request.params);
+
+  if (!parsedParams.success) {
+    return sendValidationError(reply, parsedParams.error);
+  }
+
+  const actor = authorizeBillingRequest(request, reply, parsedParams.data.branchId);
+
+  if (!actor) {
+    return reply;
+  }
+
+  const parsedBody = recordBillPaymentSchema.safeParse(request.body);
+
+  if (!parsedBody.success) {
+    return sendValidationError(reply, parsedBody.error);
+  }
+
+  try {
+    const result = await payBillSplitPart(
+      actor,
+      parsedParams.data.branchId,
+      parsedParams.data.billId,
+      parsedParams.data.partNumber,
+      parsedBody.data,
+    );
+
+    if (!result) {
+      return sendBillNotFound(reply);
+    }
+
+    const settled = result.bill.status === "settled";
+
+    return sendSuccess(
+      reply,
+      result.replayed ? 200 : 201,
+      result.replayed
+        ? "Payment already recorded"
+        : settled
+          ? "Payment recorded. All parts are paid and the bill is settled."
+          : "Payment recorded for this part",
+      result,
+    );
+  } catch (error: unknown) {
+    return sendBillingError(request, reply, error, "Failed to record split payment");
   }
 }

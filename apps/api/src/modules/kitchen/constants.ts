@@ -24,6 +24,8 @@ export enum KitchenEventName {
   TICKET_UPDATED = "ticket_updated",
   TICKET_STATUS_CHANGED = "ticket_status_changed",
   ORDER_LATE = "order_late",
+  /** An order or items moved table: print the Kitchen Shift slip. */
+  TABLE_TRANSFERRED = "table_transferred",
 }
 
 /** Station used for items that have no kitchen station (custom items). */
