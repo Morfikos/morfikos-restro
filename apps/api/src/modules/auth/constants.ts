@@ -47,6 +47,7 @@ export enum AuthErrorCode {
   BRANCH_ACCESS_DENIED = "BRANCH_ACCESS_DENIED",
   BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
   ROLE_NOT_CONFIGURED = "ROLE_NOT_CONFIGURED",
+  FORBIDDEN = "FORBIDDEN",
   INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR",
 }
 
@@ -77,6 +78,9 @@ export const AUTH_MESSAGES = {
   BRANCH_REQUIRED_FOR_MANAGER: "Managers must assign staff to one of their branches",
   BRANCH_NOT_FOUND: "Active branch not found in this organization",
   ROLE_NOT_CONFIGURED: "System role is not configured. Run the database seed.",
+  MANAGER_PIN_SET: "Manager PIN set successfully",
+  PIN_NOT_ALLOWED: "Only owners and managers can set an approval PIN",
+  NO_ORGANIZATION_MEMBERSHIP: "You are not a member of an organization yet",
 } as const;
 
 /**

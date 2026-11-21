@@ -101,6 +101,43 @@ export enum FloorServiceErrorCode {
 }
 
 /**
+ * Defines standardized error codes for kitchen display (KDS) operations.
+ */
+export enum KitchenServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  TICKET_NOT_FOUND = "TICKET_NOT_FOUND",
+  TICKET_CLOSED = "TICKET_CLOSED",
+  INVALID_ITEM_INDEX = "INVALID_ITEM_INDEX",
+}
+
+/**
+ * Defines standardized error codes for billing, invoice and credit note
+ * operations.
+ */
+export enum BillingServiceErrorCode {
+  BRANCH_NOT_FOUND = "BRANCH_NOT_FOUND",
+  TABLE_NOT_FOUND = "TABLE_NOT_FOUND",
+  ORDER_NOT_FOUND = "ORDER_NOT_FOUND",
+  ORDER_NOT_BILLABLE = "ORDER_NOT_BILLABLE",
+  ORDER_TABLE_MISMATCH = "ORDER_TABLE_MISMATCH",
+  EMPTY_ORDER = "EMPTY_ORDER",
+  BILL_NOT_FOUND = "BILL_NOT_FOUND",
+  BILL_NOT_OPEN = "BILL_NOT_OPEN",
+  BILL_HAS_PAYMENTS = "BILL_HAS_PAYMENTS",
+  BILL_NOT_FULLY_PAID = "BILL_NOT_FULLY_PAID",
+  PAYMENT_MISMATCH = "PAYMENT_MISMATCH",
+  PAYMENT_EXCEEDS_BALANCE = "PAYMENT_EXCEEDS_BALANCE",
+  INVALID_DISCOUNT = "INVALID_DISCOUNT",
+  DISCOUNT_BELOW_PAID = "DISCOUNT_BELOW_PAID",
+  MANAGER_APPROVAL_REQUIRED = "MANAGER_APPROVAL_REQUIRED",
+  INVALID_MANAGER_PIN = "INVALID_MANAGER_PIN",
+  PIN_NOT_SET = "PIN_NOT_SET",
+  INVOICE_NOT_FOUND = "INVOICE_NOT_FOUND",
+  CREDIT_EXCEEDS_INVOICE = "CREDIT_EXCEEDS_INVOICE",
+  FORBIDDEN = "FORBIDDEN",
+}
+
+/**
  * Defines the live status of a table, derived from its current order:
  * no open order, an open order being served, or a bill printed and
  * awaiting payment.

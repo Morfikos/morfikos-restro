@@ -29,8 +29,13 @@ model User {
   ordersCancelled     Order[]     @relation("OrderCancelledBy")
   orderItemsVoided    OrderItem[] @relation("OrderItemVoidedBy")
   kotsCreated         Kot[]       @relation("KotCreatedBy")
-  paymentsReceived    Payment[]   @relation("PaymentReceivedBy")
+  paymentsReceived    BillPayment[] @relation("BillPaymentReceivedBy")
   layoutImports       FloorLayoutImport[] @relation("LayoutImportCreatedBy")
+  billsCreated        Bill[]        @relation("BillCreatedBy")
+  billsCancelled      Bill[]        @relation("BillCancelledBy")
+  discountsApplied    Bill[]        @relation("BillDiscountAppliedBy")
+  discountsApproved   Bill[]        @relation("BillDiscountApprovedBy")
+  creditNotesCreated  CreditNote[]  @relation("CreditNoteCreatedBy")
 }
 
 model PasswordResetToken {
@@ -63,6 +68,9 @@ model Organization {
   cuisines       Cuisine[]
   menuItems      MenuItem[]
   orders         Order[]
+  bills          Bill[]
+  invoices       Invoice[]
+  creditNotes    CreditNote[]
   }
 
 model Branch {
@@ -94,8 +102,13 @@ model Branch {
   diningTables     DiningTable[]
   orders           Order[]
   kots             Kot[]
+  kitchenTickets   KitchenTicket[]
   counters         BranchCounter[]
   floors           Floor[]
+  bills            Bill[]
+  billPayments     BillPayment[]
+  invoices         Invoice[]
+  creditNotes      CreditNote[]
   @@index([organizationId])
   @@index([organizationId, status])
 }
@@ -348,6 +361,7 @@ model DiningTable {
   branch    Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
   floor     Floor?     @relation(fields: [floorId], references: [id], onDelete: SetNull)
   orders    Order[]
+  bills     Bill[]
   @@unique([branchId, name])
   @@index([branchId])
   @@index([branchId, isActive])
@@ -449,6 +463,14 @@ enum KotStatus {
   CANCELLED
 }
 
+enum KitchenTicketStatus {
+  OPEN
+  IN_PROGRESS
+  READY
+  SERVED
+  CANCELLED
+}
+
 model Order {
   id             String        @id @default(uuid())
   organizationId String
@@ -463,6 +485,7 @@ model Order {
   customerName   String?
   customerPhone  String?
   note           String?
+  allergyNote    String?
   subtotal       Decimal       @default(0) @db.Decimal(12, 2)
   discountAmount Decimal       @default(0) @db.Decimal(12, 2)
   taxAmount      Decimal       @default(0) @db.Decimal(12, 2)
@@ -471,6 +494,7 @@ model Order {
   amountPaid     Decimal       @default(0) @db.Decimal(12, 2)
   invoiceNumber  String?
   financialYear  String?
+  billId         String?
   createdById    String
   billedAt       DateTime?
   paidAt         DateTime?
@@ -484,11 +508,13 @@ model Order {
   table          DiningTable?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
   createdBy      User          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   cancelledBy    User?         @relation("OrderCancelledBy", fields: [cancelledById], references: [id])
+  bill           Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
   items          OrderItem[]
   kots           Kot[]
-  payments       Payment[]
+  kitchenTickets KitchenTicket[]
   @@unique([branchId, orderNumber])
-  @@unique([branchId, invoiceNumber])
+  @@index([branchId, invoiceNumber])
+  @@index([billId])
   @@index([branchId, status])
   @@index([branchId, businessDate])
   @@index([tableId, status])
@@ -516,6 +542,8 @@ model OrderItem {
   note           String?
   status         OrderItemStatus @default(PENDING)
   kotId          String?
+  kitchenTicketId String?
+  kitchenReadyAt DateTime?
   voidedAt       DateTime?
   voidedById     String?
   voidReason     String?
@@ -524,9 +552,11 @@ model OrderItem {
   order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem       MenuItem?       @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
   kot            Kot?            @relation(fields: [kotId], references: [id], onDelete: SetNull)
+  kitchenTicket  KitchenTicket?  @relation(fields: [kitchenTicketId], references: [id], onDelete: SetNull)
   voidedBy       User?           @relation("OrderItemVoidedBy", fields: [voidedById], references: [id])
   @@unique([orderId, lineNumber])
   @@index([kotId])
+  @@index([kitchenTicketId])
   @@index([menuItemId])
 }
 
@@ -535,6 +565,7 @@ model Kot {
   orderId      String
   branchId     String
   kotNumber    Int
+  roundNo      Int         @default(1)
   businessDate String
   status       KotStatus   @default(PENDING)
   createdById  String
@@ -544,22 +575,170 @@ model Kot {
   branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
   createdBy    User        @relation("KotCreatedBy", fields: [createdById], references: [id])
   items        OrderItem[]
+  tickets      KitchenTicket[]
   @@unique([branchId, businessDate, kotNumber])
   @@index([orderId])
 }
 
-model Payment {
-  id             String        @id @default(uuid())
+model KitchenTicket {
+  id             String              @id @default(uuid())
+  branchId       String
   orderId        String
-  method         PaymentMethod
-  amount         Decimal       @db.Decimal(12, 2)
-  tenderedAmount Decimal?      @db.Decimal(12, 2)
-  reference      String?
-  receivedById   String
-  createdAt      DateTime      @default(now())
-  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  receivedBy     User          @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  kotId          String
+  station        String
+  status         KitchenTicketStatus @default(OPEN)
+  startedAt      DateTime?
+  readyAt        DateTime?
+  bumpedAt       DateTime?
+  lateNotifiedAt DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  branch         Branch              @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kot            Kot                 @relation(fields: [kotId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+  @@unique([kotId, station])
+  @@index([branchId, status, createdAt])
   @@index([orderId])
+}
+
+enum BillStatus {
+  OPEN
+  SETTLED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_CREDITED
+  CREDITED
+}
+
+enum CreditNoteStatus {
+  ISSUED
+}
+
+model Bill {
+  id                   String        @id @default(uuid())
+  organizationId       String
+  branchId             String
+  billNumber           Int
+  businessDate         String
+  tableId              String?
+  guestId              String?
+  shiftId              String?
+  status               BillStatus    @default(OPEN)
+  subtotalPaise        Int           @default(0)
+  discountPaise        Int           @default(0)
+  taxPaise             Int           @default(0)
+  roundOffPaise        Int           @default(0)
+  totalPaise           Int           @default(0)
+  paidPaise            Int           @default(0)
+  discountType         DiscountType?
+  discountValue        Decimal?      @db.Decimal(12, 2)
+  discountAmountPaise  Int           @default(0)
+  discountReasonCode   String?
+  offerId              String?
+  couponCode           String?
+  discountAppliedById  String?
+  discountApprovedById String?
+  createdById          String
+  settledAt            DateTime?
+  cancelledAt          DateTime?
+  cancelledById        String?
+  cancelReason         String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table                DiningTable?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  createdBy            User          @relation("BillCreatedBy", fields: [createdById], references: [id])
+  cancelledBy          User?         @relation("BillCancelledBy", fields: [cancelledById], references: [id])
+  discountAppliedBy    User?         @relation("BillDiscountAppliedBy", fields: [discountAppliedById], references: [id])
+  discountApprovedBy   User?         @relation("BillDiscountApprovedBy", fields: [discountApprovedById], references: [id])
+  orders               Order[]
+  payments             BillPayment[]
+  invoice              Invoice?
+  @@unique([branchId, businessDate, billNumber])
+  @@index([branchId, status])
+  @@index([branchId, businessDate])
+}
+
+model BillPayment {
+  id             String        @id @default(uuid())
+  billId         String
+  branchId       String
+  method         PaymentMethod
+  amountPaise    Int
+  tenderedPaise  Int?
+  reference      String?
+  idempotencyKey String?
+  receivedById   String
+  paidAt         DateTime      @default(now())
+  bill           Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
+  branch         Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  receivedBy     User          @relation("BillPaymentReceivedBy", fields: [receivedById], references: [id])
+  @@unique([billId, idempotencyKey])
+  @@index([billId])
+  @@index([branchId, paidAt])
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  branchId       String
+  billId         String        @unique
+  invoiceNumber  String
+  financialYear  String
+  businessDate   String
+  issuedAt       DateTime      @default(now())
+  gstin          String
+  subtotalPaise  Int
+  discountPaise  Int
+  taxPaise       Int
+  cgstPaise      Int
+  sgstPaise      Int
+  roundOffPaise  Int
+  totalPaise     Int
+  creditedPaise  Int           @default(0)
+  taxBreakdown   Json          @default("[]")
+  status         InvoiceStatus @default(ISSUED)
+  createdAt      DateTime      @default(now())
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  bill           Bill          @relation(fields: [billId], references: [id], onDelete: Cascade)
+  creditNotes    CreditNote[]
+  @@unique([branchId, invoiceNumber])
+  @@index([branchId, businessDate])
+}
+
+model CreditNote {
+  id                  String           @id @default(uuid())
+  organizationId      String
+  branchId            String
+  invoiceId           String
+  creditNoteNumber    String
+  financialYear       String
+  businessDate        String
+  originalAmountPaise Int
+  creditAmountPaise   Int
+  taxPaise            Int
+  reasonCode          String
+  status              CreditNoteStatus @default(ISSUED)
+  createdById         String
+  createdAt           DateTime         @default(now())
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch              Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  invoice             Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy           User             @relation("CreditNoteCreatedBy", fields: [createdById], references: [id])
+  @@unique([branchId, creditNoteNumber])
+  @@index([invoiceId])
+  @@index([branchId, businessDate])
 }
 
 model BranchCounter {

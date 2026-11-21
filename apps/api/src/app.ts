@@ -14,6 +14,8 @@ import { menuRoutes } from "./modules/menu/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { tableRoutes } from "./modules/tables/routes.js";
 import { floorRoutes } from "./modules/floors/routes.js";
+import { kitchenRoutes } from "./modules/kitchen/routes.js";
+import { billingRoutes } from "./modules/billing/routes.js";
 import {
   MAX_IMAGE_BYTES,
   UPLOADS_URL_PREFIX,
@@ -50,6 +52,8 @@ export function buildApp() {
   app.register(orderRoutes);
   app.register(tableRoutes);
   app.register(floorRoutes);
+  app.register(kitchenRoutes);
+  app.register(billingRoutes);
   app.get("/api/health", async () => {
     return { ok: true };
   });
