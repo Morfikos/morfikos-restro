@@ -1,7 +1,10 @@
 node_modules
 dist
+.next
+next-env.d.ts
 .turbo
 .env
+*.tsbuildinfo
 *.sqlite
 *.sqlite-journal
 .DS_Store

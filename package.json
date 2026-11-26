@@ -1,16 +1,25 @@
 {
   "name": "morfikos-restro",
   "private": true,
-  "packageManager": "pnpm@12.3.4",
+  "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "turbo run dev --filter=@morfikos/web --filter=@morfikos/api",
-    "dev:frontend": "turbo run dev --filter=@morfikos/web",
-    "dev:backend": "turbo run dev --filter=@morfikos/api",
-    "dev:api": "turbo run dev --filter=@morfikos/api",
+    "dev": "turbo run dev --filter=@morfikos/api --filter=@morfikos/owner --filter=@morfikos/cashier --filter=@morfikos/waiter --filter=@morfikos/kitchen --filter=@morfikos/guest",
+    "dev:api": "pnpm --filter @morfikos/api dev",
+    "dev:backend": "pnpm --filter @morfikos/api dev",
+    "dev:owner": "pnpm --filter @morfikos/owner dev",
+    "dev:cashier": "pnpm --filter @morfikos/cashier dev",
+    "dev:waiter": "pnpm --filter @morfikos/waiter dev",
+    "dev:kitchen": "pnpm --filter @morfikos/kitchen dev",
+    "dev:guest": "pnpm --filter @morfikos/guest dev",
+    "dev:frontend": "turbo run dev --filter=@morfikos/owner --filter=@morfikos/cashier --filter=@morfikos/waiter --filter=@morfikos/kitchen --filter=@morfikos/guest",
     "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @morfikos/database generate",
+    "db:migrate": "pnpm --filter @morfikos/database exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @morfikos/database seed",
     "postinstall": "pnpm --filter @morfikos/database generate"
   },
   "devDependencies": {

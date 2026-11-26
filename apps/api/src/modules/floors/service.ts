@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import {
   FLOOR_OBJECT_TYPES,
   TABLE_SHAPES,
@@ -26,7 +26,6 @@ import { ACTIVE_ORDER_STATUSES } from "../orders/constants.js";
 import { serializeTable, tableSelect } from "../tables/service.js";
 import { detectFloorLayout, isLayoutDetectorConfigured } from "./layout-detector.js";
 
-const prisma = createPrismaClient();
 
 /** Upload folder for floor background images. */
 const BACKGROUND_FOLDER = "floors";

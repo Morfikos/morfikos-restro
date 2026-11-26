@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import type {
   CreateCategoryInput,
   CreateCuisineInput,
@@ -15,7 +15,6 @@ import { MenuServiceErrorCode } from "@morfikos/auth";
 
 import { isPrismaUniqueConstraintError } from "../../utils/prisma-errors.js";
 
-const prisma = createPrismaClient();
 
 /**
  * Fields returned for categories and cuisines in API responses.
