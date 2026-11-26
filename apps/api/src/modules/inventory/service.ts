@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { InventoryServiceErrorCode, verifyPassword, type UserRole } from "@morfikos/auth";
 import type {
   CreateInventoryItemInput,
@@ -58,7 +58,6 @@ import {
 
 export { InventoryServiceError, isInventoryServiceError } from "./errors.js";
 
-const prisma = createPrismaClient();
 
 /** A Prisma decimal value. */
 type DecimalValue = { toNumber(): number };

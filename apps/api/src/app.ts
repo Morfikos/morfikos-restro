@@ -24,6 +24,9 @@ import { roleRoutes } from "./modules/roles/routes.js";
 import { qrRoutes } from "./modules/qr/routes.js";
 import { reportRoutes } from "./modules/reports/routes.js";
 import { paymentRoutes } from "./modules/payments/routes.js";
+import { contextPlugin } from "./plugins/context.js";
+import { errorsPlugin } from "./plugins/errors.js";
+import { securityPlugin } from "./plugins/security.js";
 import {
   MAX_IMAGE_BYTES,
   UPLOADS_URL_PREFIX,
@@ -34,9 +37,13 @@ const webDistPath = fileURLToPath(
   new URL("../../web/dist/", import.meta.url),
 );
 
-export function buildApp() {
+export async function buildApp() {
   const app = Fastify({ logger: true });
   const servesWeb = existsSync(webDistPath);
+
+  await app.register(contextPlugin);
+  await app.register(errorsPlugin);
+  await app.register(securityPlugin);
 
   // Image uploads (one file per request) and serving of uploaded files.
   app.register(fastifyMultipart, {

@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { OrderServiceErrorCode } from "@morfikos/auth";
 import type {
   ListTableTransfersQuery,
@@ -26,7 +26,6 @@ import {
   type TransactionClient,
 } from "./service.js";
 
-const prisma = createPrismaClient();
 
 /**
  * Table actions (menutap: "Table transfer"): move an order to another

@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 
 import QRCode from "qrcode";
 
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { PaymentServiceErrorCode, type UserRole } from "@morfikos/auth";
 import type {
   ConfirmPaymentRequestInput,
@@ -30,7 +30,6 @@ import {
   REFERENCE_SUFFIX_LENGTH,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
 type TransactionClient = Omit<

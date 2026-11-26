@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { BillingServiceErrorCode, verifyPassword, type UserRole } from "@morfikos/auth";
 import type {
   ApplyBillDiscountInput,
@@ -31,7 +31,6 @@ import {
   PaymentMethod,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
 export type TransactionClient = Omit<

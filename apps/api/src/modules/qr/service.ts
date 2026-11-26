@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { QrServiceErrorCode, type UserRole } from "@morfikos/auth";
 import type {
   CreateServiceRequestInput,
@@ -34,7 +34,6 @@ import {
   TableSessionStatus,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
 type TransactionClient = Omit<

@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { GuestServiceErrorCode, type UserRole } from "@morfikos/auth";
 import type {
   AdjustLoyaltyInput,
@@ -26,7 +26,6 @@ import {
   VISIT_HISTORY_LIMIT,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 

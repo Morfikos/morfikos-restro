@@ -1,6 +1,6 @@
 
 import { format } from "date-fns";
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import type {
   CreateBranchInput,
   ListBranchesQuery,
@@ -8,7 +8,6 @@ import type {
 } from "@morfikos/validation";
 
 import { BranchServiceErrorCode, NON_ALPHANUMERIC_BRANCH_CODE_REGEX } from "@morfikos/auth";
-const prisma = createPrismaClient();
 
 /**
  * Represents errors that can occur during branch operations.

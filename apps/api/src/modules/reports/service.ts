@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { ReportServiceErrorCode, type UserRole } from "@morfikos/auth";
 import type {
   DashboardQuery,
@@ -16,7 +16,6 @@ import {
   WEEKDAY_NAMES,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /** A Prisma Decimal value, typed structurally. */
 type DecimalValue = { toNumber(): number };

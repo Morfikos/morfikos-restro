@@ -1,7 +1,6 @@
-import { createPrismaClient } from "@morfikos/database"
+import { db as prisma } from "../../plugins/db.js";
 import type { CreateOrganizationInput } from "@morfikos/validation"
 
-const prisma = createPrismaClient()
 
 export async function createOrganization(
   data: CreateOrganizationInput,

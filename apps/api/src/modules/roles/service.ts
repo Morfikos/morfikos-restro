@@ -1,9 +1,8 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import type { UserRole } from "@morfikos/auth";
 
 import { MANAGEABLE_ROLES, ORGANIZATION_ROLES, PERMISSIONS, ROLE_DETAILS } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /**
  * The authenticated user viewing roles.

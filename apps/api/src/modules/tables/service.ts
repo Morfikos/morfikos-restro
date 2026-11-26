@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import type {
   CreateTableInput,
   ListTablesQuery,
@@ -13,7 +13,6 @@ import { TableServiceErrorCode, TableStatus } from "@morfikos/auth";
 import { isPrismaUniqueConstraintError } from "../../utils/prisma-errors.js";
 import { ACTIVE_ORDER_STATUSES, OrderStatus } from "../orders/constants.js";
 
-const prisma = createPrismaClient();
 
 /**
  * Represents errors that can occur during table operations.

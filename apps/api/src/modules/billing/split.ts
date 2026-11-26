@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { BillingServiceErrorCode } from "@morfikos/auth";
 import type { RecordBillPaymentInput, SplitBillInput } from "@morfikos/validation";
 
@@ -20,7 +20,6 @@ import {
   type TransactionClient,
 } from "./service.js";
 
-const prisma = createPrismaClient();
 
 /** One item (or a share of it) on an item-split part. */
 interface SplitItem {

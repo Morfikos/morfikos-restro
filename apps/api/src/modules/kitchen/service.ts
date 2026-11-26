@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import type {
   BumpKitchenTicketInput,
   ListKitchenTicketsQuery,
@@ -25,7 +25,6 @@ import {
   type KitchenEvent,
 } from "./events.js";
 
-const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
 export type TransactionClient = Omit<

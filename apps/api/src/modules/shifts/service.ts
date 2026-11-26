@@ -1,4 +1,4 @@
-import { createPrismaClient } from "@morfikos/database";
+import { db as prisma } from "../../plugins/db.js";
 import { ShiftServiceErrorCode, type UserRole } from "@morfikos/auth";
 import type {
   CashMovementInput,
@@ -25,7 +25,6 @@ import {
   ShiftStatus,
 } from "./constants.js";
 
-const prisma = createPrismaClient();
 
 /** The Prisma client available inside an interactive transaction. */
 type TransactionClient = Omit<
